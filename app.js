@@ -55,36 +55,36 @@
   /* ---------- 컬럼 매칭 (영문/한글/일문/구 Tweet activity) — 대소문자·공백·기호 무시 ---------- */
   const norm = (h) => String(h).toLowerCase().replace(/[\s_\-.,:;()\[\]/·'"#&+]/g, '');
   const ALIAS = {
-    id: ['postid', 'tweetid', 'id', 'postidentifier', '게시물id', '포스트id', '트윗id', '게시물아이디', 'ポストid', '投稿id'],
-    date: ['date', 'time', 'day', 'createdat', 'createdate', 'postdate', 'datetime', 'posttime', 'postedat', 'publishedat', 'timestamp', '날짜', '일시', '게시일', '게시일시', '작성일', '작성일시', '日付', '投稿日時'],
-    text: ['posttext', 'tweettext', 'text', 'content', 'postcontent', 'body', '게시물텍스트', '게시물내용', '게시물본문', '본문', '내용', '텍스트', 'ポスト本文', '投稿内容', 'ポストテキスト'],
-    link: ['postlink', 'tweetpermalink', 'permalink', 'link', 'posturl', 'tweeturl', 'url', '게시물링크', '링크', '게시물url', '投稿url'],
-    imp: ['impressions', 'impression', 'views', 'impressioncount', 'postimpressions', '노출수', '노출횟수', '노출', '임프레션', '임프레션수', '조회수', 'インプレッション数', 'インプレッション'],
-    likes: ['likes', 'like', 'favorites', 'favourites', '좋아요', '좋아요수', '마음에들어요', '마음에들어요수', 'いいね'],
-    eng: ['engagements', 'engagement', 'totalengagements', '참여', '참여수', '참여횟수', 'エンゲージメント'],
-    bm: ['bookmarks', 'bookmark', '북마크', '북마크수', 'ブックマーク'],
-    shares: ['shares', 'share', 'sharecount', '공유', '공유수', '공유횟수', '共有'],
-    nf: ['newfollows', 'newfollow', 'follows', 'newfollowers', 'followsgained', 'followersgained', '새로운팔로우', '새팔로워', '새팔로우', '새로운팔로워', '新しいフォロー'],
-    unf: ['unfollows', 'unfollow', 'unfollowers', 'followslost', '언팔로우', '언팔로우수', 'フォロー解除'],
-    posts: ['posts', 'postscreated', 'postcount', 'createpost', 'createposts', 'createdposts', '게시물작성하기', '게시물수', '작성한게시물', 'ポスト'],
-    vid: ['videoviews', 'videoview', '동영상조회수', '동영상재생수', '動画再生数'],
-    media: ['mediaviews', 'mediaview', '미디어조회수', '미디어재생수', 'メディアの再生数'],
-    rep: ['replies', 'reply', '답글', '답글수', '답글횟수', '返信'],
-    rt: ['reposts', 'retweets', 'repost', 'retweet', '재게시', '재게시수', '재게시물', '리포스트', '리트윗', 'リポスト'],
-    prof: ['profilevisits', 'profilevisit', 'userprofileclicks', 'profileclicks', 'profileviews', '프로필조회수', '프로필방문', '프로필방문수', '프로필클릭', 'プロフィールへのアクセス数'],
-    det: ['detailexpands', 'detailexpand', 'detailsexpands', 'detailsexpanded', 'detailclicks', '세부정보펼치기', '세부정보확장', '상세보기', '상세클릭', '세부정보클릭', '詳細のクリック数', '詳細表示'],
-    url: ['urlclicks', 'urlclick', 'url클릭수', 'url클릭', 'linkclicks', '링크클릭', '링크클릭수', 'urlのクリック数'],
-    tag: ['hashtagclicks', 'hashtagclick', '해시태그클릭수', '해시태그클릭', 'ハッシュタグのクリック数'],
-    plink: ['permalinkclicks', 'permalinkclick', '고유링크클릭수', '고유링크클릭', '퍼머링크클릭', 'パーマリンクのクリック数'],
+    id: ['postid', 'tweetid', 'id', 'postidentifier', '게시물id', '포스트id', '트윗id', '게시물아이디', 'ポストid', '投稿id', 'ツイートid'],
+    date: ['date', 'time', 'day', 'createdat', 'createdate', 'postdate', 'datetime', 'posttime', 'postedat', 'publishedat', 'timestamp', '날짜', '일시', '게시일', '게시일시', '작성일', '작성일시', '日付', '投稿日時', '投稿日', '日時', '時間'],
+    text: ['posttext', 'tweettext', 'text', 'content', 'postcontent', 'body', '게시물텍스트', '게시물내용', '게시물본문', '본문', '내용', '텍스트', 'ポスト本文', '投稿内容', 'ポストテキスト', 'ポストのテキスト', 'ツイート本文', '本文'],
+    link: ['postlink', 'tweetpermalink', 'permalink', 'link', 'posturl', 'tweeturl', 'url', '게시물링크', '링크', '게시물url', '投稿url', 'ポストのリンク', 'ポストリンク', 'ツイートの固定リンク', '投稿リンク'],
+    imp: ['impressions', 'impression', 'views', 'impressioncount', 'postimpressions', '노출수', '노출횟수', '노출', '임프레션', '임프레션수', '조회수', 'インプレッション数', 'インプレッション', '表示回数', 'インプレッション回数'],
+    likes: ['likes', 'like', 'favorites', 'favourites', '좋아요', '좋아요수', '마음에들어요', '마음에들어요수', 'いいね', 'いいね数', 'お気に入り'],
+    eng: ['engagements', 'engagement', 'totalengagements', '참여', '참여수', '참여횟수', 'エンゲージメント', 'エンゲージメント数'],
+    bm: ['bookmarks', 'bookmark', '북마크', '북마크수', 'ブックマーク', 'ブックマーク数'],
+    shares: ['shares', 'share', 'sharecount', '공유', '공유수', '공유횟수', '共有', '共有数', 'シェア', 'シェア数'],
+    nf: ['newfollows', 'newfollow', 'follows', 'newfollowers', 'followsgained', 'followersgained', '새로운팔로우', '새팔로워', '새팔로우', '새로운팔로워', '新しいフォロー', '新しいフォロワー', '新規フォロー', '新規フォロワー'],
+    unf: ['unfollows', 'unfollow', 'unfollowers', 'followslost', '언팔로우', '언팔로우수', 'フォロー解除', 'フォロー解除数', 'アンフォロー'],
+    posts: ['posts', 'postscreated', 'postcount', 'createpost', 'createposts', 'createdposts', '게시물작성하기', '게시물수', '작성한게시물', 'ポスト', 'ポストを作成', '投稿数'],
+    vid: ['videoviews', 'videoview', '동영상조회수', '동영상재생수', '動画再生数', '動画の再生数', 'ビデオ再生数', '動画の視聴回数'],
+    media: ['mediaviews', 'mediaview', '미디어조회수', '미디어재생수', 'メディアの再生数', 'メディア再生数'],
+    rep: ['replies', 'reply', '답글', '답글수', '답글횟수', '返信', '返信数', 'リプライ', 'リプライ数'],
+    rt: ['reposts', 'retweets', 'repost', 'retweet', '재게시', '재게시수', '재게시물', '리포스트', '리트윗', 'リポスト', 'リポスト数', 'リツイート', 'リツイート数'],
+    prof: ['profilevisits', 'profilevisit', 'userprofileclicks', 'profileclicks', 'profileviews', '프로필조회수', '프로필방문', '프로필방문수', '프로필클릭', 'プロフィールへのアクセス数', 'プロフィールへのアクセス', 'プロフィールアクセス', 'ユーザープロフィールクリック', 'プロフィールクリック'],
+    det: ['detailexpands', 'detailexpand', 'detailsexpands', 'detailsexpanded', 'detailclicks', '세부정보펼치기', '세부정보확장', '상세보기', '상세클릭', '세부정보클릭', '詳細のクリック数', '詳細表示', '詳細クリック', '詳細の展開'],
+    url: ['urlclicks', 'urlclick', 'url클릭수', 'url클릭', 'linkclicks', '링크클릭', '링크클릭수', 'urlのクリック数', 'urlクリック数', 'urlクリック'],
+    tag: ['hashtagclicks', 'hashtagclick', '해시태그클릭수', '해시태그클릭', 'ハッシュタグのクリック数', 'ハッシュタグクリック', 'ハッシュタグのクリック'],
+    plink: ['permalinkclicks', 'permalinkclick', '고유링크클릭수', '고유링크클릭', '퍼머링크클릭', 'パーマリンクのクリック数', '固定リンクのクリック数', '固定リンクのクリック', 'パーマリンクのクリック'],
   };
   XA.ALIAS = ALIAS;
   function mapColumns(headers) {
     const H = headers.map(norm); const map = {}; const used = new Set();
-    const bad = (h) => /promoted|paid|유료|프로모션|광고/.test(h);
+    const bad = (h) => /promoted|paid|유료|프로모션|광고|プロモ|広告/.test(h);
     // 1차: 정확히 일치하는 칸 먼저 (모든 항목), 2차: 부분 일치 + 제외 규칙
-    const ok = (k, h) => !(k === 'eng' && /rate|율/.test(h)) && !(k === 'link' && /click|클릭/.test(h)) && !(k === 'id' && h !== 'id' && !/id|아이디/.test(h)) && !(k === 'text' && /click|클릭|작성|create/.test(h)) &&
-      !(k === 'imp' && /동영상|미디어|프로필|video|media|profile/.test(h)) && !(k === 'nf' && /^un|언팔|lost/.test(h)) && !(k === 'url' && /permalink|고유|퍼머/.test(h)) &&
-      !(k === 'likes' && /rate/.test(h)) && !(k === 'date' && /update/.test(h));
+    const ok = (k, h) => !(k === 'eng' && /rate|율|率/.test(h)) && !(k === 'link' && /click|클릭|クリック/.test(h)) && !(k === 'id' && h !== 'id' && !/id|아이디/.test(h)) && !(k === 'text' && /click|클릭|クリック|작성|create|作成/.test(h)) &&
+      !(k === 'imp' && /동영상|미디어|프로필|video|media|profile|動画|メディア|プロフィール/.test(h)) && !(k === 'nf' && /^un|언팔|lost|解除|アンフォロー/.test(h)) && !(k === 'url' && /permalink|고유|퍼머|固定リンク|パーマリンク/.test(h)) &&
+      !(k === 'likes' && /rate|率/.test(h)) && !(k === 'date' && /update|更新/.test(h));
     for (const [k, al] of Object.entries(ALIAS)) { const idx = H.findIndex((h, i) => !used.has(i) && !bad(h) && al.includes(h)); if (idx >= 0) { map[k] = idx; used.add(idx); } }
     for (const [k, al] of Object.entries(ALIAS)) {
       if (map[k] != null || k === 'posts') continue;
@@ -96,7 +96,7 @@
   function num(v) {
     if (v == null) return 0; let s = String(v).trim().replace(/,/g, '');
     if (!s || s === '-' || s === '—') return 0;
-    let m = 1; if (/k$/i.test(s)) { m = 1e3; s = s.slice(0, -1); } else if (/m$/i.test(s)) { m = 1e6; s = s.slice(0, -1); } else if (/만$/.test(s)) { m = 1e4; s = s.slice(0, -1); }
+    let m = 1; if (/k$/i.test(s)) { m = 1e3; s = s.slice(0, -1); } else if (/m$/i.test(s)) { m = 1e6; s = s.slice(0, -1); } else if (/[만万]$/.test(s)) { m = 1e4; s = s.slice(0, -1); }
     const n = parseFloat(s); return isFinite(n) ? n * m : 0;
   }
 
@@ -119,6 +119,8 @@
     }
     m = s.match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\s*(오전|오후)?\s*(\d{1,2}):(\d{2}))?/);
     if (m) { let h = +(m[5] || 0); if (m[4] === '오후' && h < 12) h += 12; if (m[4] === '오전' && h === 12) h = 0; return { ms: Date.UTC(+m[1], +m[2] - 1, +m[3], h, +(m[6] || 0)) - 9 * 3600e3, hasTime: !!m[5], assumed: !!m[5] }; }
+    m = s.match(/^(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日(?:\s*(午前|午後)?\s*(\d{1,2}):(\d{2}))?/);
+    if (m) { let h = +(m[5] || 0); if (m[4] === '午後' && h < 12) h += 12; if (m[4] === '午前' && h === 12) h = 0; return { ms: Date.UTC(+m[1], +m[2] - 1, +m[3], h, +(m[6] || 0)) - 9 * 3600e3, hasTime: !!m[5], assumed: !!m[5] }; }
     const p = Date.parse(s);
     if (!isNaN(p)) {
       const tz = /(Z|[+-]\d{2}:?\d{2}|UTC|GMT)\s*$/i.test(s);
@@ -134,16 +136,16 @@
   const isReplyText = (s) => /^\s*[@＠][A-Za-z0-9_]{1,15}\b/.test(String(s || ''));
   XA.isReplyText = isReplyText;
 
-  /* ---------- 카테고리 규칙 (한국어 + 영어 키워드, 점수가 가장 높은 쪽). 이름은 i18n 'cat.<id>' ---------- */
+  /* ---------- 카테고리 규칙 (한국어 + 영어 + 일본어 키워드, 점수가 가장 높은 쪽). 이름은 i18n 'cat.<id>' ---------- */
   const CATS = ['guide', 'exp', 'video', 'daily', 'news', 'quote', 'etc'];
   XA.CATS = CATS;
-  const NUMLIST = /^\s*(\d{1,2}[.)]|[①②③④⑤⑥⑦⑧⑨⑩]|step\s*\d|\d{1,2}단계)/gim;
+  const NUMLIST = /^\s*(\d{1,2}[.)、．]|[①②③④⑤⑥⑦⑧⑨⑩]|step\s*\d|\d{1,2}단계|\d{1,2}\s*ステップ)/gim;
   const countList = (s) => (s.match(NUMLIST) || []).length + Math.max(0, (s.match(/(^|\s)(\d{1,2}\.|[①②③④⑤⑥⑦⑧⑨⑩])\s/g) || []).length - 1);
   const RULES = {
     guide: [
       [/정리|모음|총정리|한\s?눈에/, 2],
       [/가이드|튜토리얼|하는\s?법|만드는\s?법|방법|꿀팁|체크리스트|템플릿|복붙|복사해서|노하우|원스톱|따라\s?(해|하)|사용법|활용법|설정법|해결법|비교/, 2],
-      [/프롬프트|prompt|명령어/i, 1], [/무료|공짜|free/i, 1], [/\d+\s*(곳|가지|단계|선)(?![가-힣])/, 2],
+      [/프롬프트|prompt|명령어|プロンプト/i, 1], [/무료|공짜|free|無料|タダ/i, 1], [/\d+\s*(곳|가지|단계|선)(?![가-힣])/, 2],
       [/저장해\s?두|저장하고|북마크/, 1], [/공유(합니다|해\s?봅|드려|해요|!)|공유해봄/, 1], [/✅|✔|📌/, 1],
       [/\[[^\]]*(방법|정리|가이드|팁|하는 법|하기|원스톱)[^\]]*\]|\[[^\]]*프롬프트[^\]]*\]\s*$|^\s*\[[^\]]*프롬프트[^\]]*\]/m, 3],
       [/이거부터|확인해\s?보세요|해\s?보세요|추천|쓸\s?만한|유용한/, 1], [/이럴\s?때|해결/, 2],
@@ -152,6 +154,10 @@
       [/\b(guide|tutorial|how[\s-]to|step[\s-]by[\s-]step|tips?|cheat\s?sheet|checklist|template|roundup|round-up|comparison|compared|ways to|playbook|walkthrough)\b/i, 2],
       [/\b\d+\s+(free\s+)?(tools|ways|tips|steps|sites|apps|prompts|resources|things|tricks|hacks|websites|extensions)\b/i, 2],
       [/\b(save this|bookmark this|bookmark it|copy[\s-]paste|you can use)\b/i, 1],
+      // 日本語
+      [/まとめ|総まとめ|ガイド|チュートリアル|やり方|作り方|使い方|方法|コツ|チェックリスト|テンプレート|コピペ|ノウハウ|比較|おすすめ/, 2],
+      [/\d+\s*(選|つ|個|ステップ|件)/, 2],
+      [/保存して|保存推奨|ブックマークして/, 1],
     ],
     exp: [
       [/\d+\s*(일|주)\s*차|\d+일째/, 3],
@@ -160,11 +166,15 @@
       // English
       [/\b(day|week)\s*\d+\b/i, 3],
       [/\b(i tried|i built|i made|i tested|i spent|tried out|experiment(ed|ing)?|built (a|an|my)|shipped|launched my|my results|lessons learned|behind the scenes|progress update|build(ing)? in public|devlog|review)\b/i, 2],
+      [/\d+\s*日目/, 3],
+      [/やってみた|作ってみた|試してみた|使ってみた|実験|制作記|挑戦|レビュー|失敗した|導入してみた/, 2],
     ],
     video: [
       [/뮤비|뮤직\s?비디오|\bep\.?\s?\d+|브이로그|소리\s?켜|🎬|티저|트레일러|\bmv\b/i, 3],
       [/영상|비디오|video/i, 1], [/애니메이션|쇼츠|숏폼|시네마틱|릴스/i, 1],
       [/\b(music video|vlog|sound on|trailer|teaser|short film|animation|cinematic|clip|reel)\b/i, 2],
+      [/ミュージックビデオ|ブイログ|音あり|ショートフィルム/, 3],
+      [/動画|ビデオ|ショート動画|シネマティック|アニメーション|アニメ/, 1],
     ],
     daily: [
       [/좋은\s?아침|굿\s?밤|점심|저녁|아침|커피|아아\b|퇴근|출근|회사|회식|주말|연휴|피곤|날씨|산책|밥|잠이|잠도|잠들|꿀잠|자야|병원|냥이|고양이|강아지|집들이|이사|팔로워\s?달성|일상|추워|덥다|비가|에피소드|썰\b|사소한|오랜만에|축구|야구|경기|선수/, 2],
@@ -172,6 +182,7 @@
       // English
       [/\b(good morning|gm|good night|gn|lunch|dinner|breakfast|coffee|weekend|tired|sleepy|weather|commute|my cat|my dog|day off|grateful|thank you|thanks everyone|\d[\d,]*\s?followers)\b/i, 2],
       [/(^|\s)(me|my boss|ai)\s?:\s/i, 3],
+      [/おはよう|おやすみ|ランチ|夕食|朝食|コーヒー|退勤|出勤|週末|疲れた|天気|散歩|うちの猫|うちの犬|日常|ありがとう|フォロワー/, 2],
     ],
     news: [
       [/출시|발표|공개|속보|소식|뉴스|신버전|새\s?버전|릴리즈|도입|베타|화제|[라다][\"'”’]?고\s?(하네요|합니다|하는데|함)|했다고\s?(하네요|합니다)|발표했|공식\s?(출처|발표)/, 2],
@@ -179,12 +190,14 @@
       [/\[오늘의[^\]]*소식\]|30초\s?(ai\s?)?소식/i, 4],
       // English
       [/\b(breaking|just (released|launched|announced|dropped)|announc(ed|es|ement)|released|launches|rolls? out|rolling out|now available|new (model|version|feature|update)|update:|according to|reportedly|this week in)\b/i, 2],
+      [/リリース|発表|公開|速報|ニュース|新バージョン|新機能|ベータ|話題|公式発表|配信開始/, 2],
     ],
     quote: [
       [/ㅋㅋ|ㄷㄷ|미쳤|대박|실화|헐|^와\s|이게 ai|반박|😱|🤣|🥲|😂|🤪|^오\s|ㅠㅠ/i, 2],
       [/이거\s?보니|보니까|보고\s?나니|느낀\s?게|기대되|맞는\s?듯|좋겠다|소름|본\s?사람\?|부럽/, 2],
       // English
       [/\b(lol|lmao|omg|wow|insane|crazy|wild|no way|can't believe|cannot believe|mind[\s-]?blown|this is (so|insane|wild|huge)|so true|same here)\b/i, 2],
+      [/やばい|すごい|まじで|マジで|草|笑った|えええ|うわ|これ見て|たまらん|やば/, 2],
     ],
   };
   function categorize(text) {
@@ -197,7 +210,7 @@
     // "~했다. ~였다." 식 서술이 3문장 이상이면 썰·에세이 → 일상
     if ((body.match(/(었|았|였|했|웠|렸|졌|났|갔|왔|봤|줬|섰|됐|렀|켰)다[.,]|(이|한|는)다[.,]/g) || []).length >= 3) sc.daily += 3;
     // 길이: 한글 글은 글자 수 그대로, 영어 글은 절반으로 환산(영어가 같은 내용에 글자를 약 2배 씀)
-    const hangul = (body.match(/[가-힣]/g) || []).length; const L = hangul >= body.replace(/\s/g, '').length * 0.3 ? body.length : body.length / 2;
+    const cjk = (body.match(/[가-힣\u3040-\u30ff\u4e00-\u9fff]/g) || []).length; const compact = body.replace(/\s/g, '').length; const L = cjk >= compact * 0.3 ? body.length : body.length / 2;
     if (L > 160) sc.quote -= 2; else if (L < 40 && /https?:\/\//.test(s)) sc.quote += 1;
     if (/x\.com\/\w+\/status|twitter\.com\/\w+\/status/.test(s)) sc.quote += 2;
     let best = 'etc', bs = 1;
@@ -208,18 +221,18 @@
   const catName = (c) => t('cat.' + c);
   XA.catName = catName;
 
-  /* ---------- 훅 키워드 (한국어 + 영어). 이름은 i18n 'hook.<id>' ---------- */
+  /* ---------- 훅 키워드 (한국어 + 영어 + 일본어). 이름은 i18n 'hook.<id>' ---------- */
   const HOOKS = [
-    ['free', (s) => /무료|공짜|\bfree\b/i.test(s)],
-    ['summary', (s) => /정리|\b(roundup|round-up|cheat\s?sheet|summary|recap)\b/i.test(s)],
-    ['dayN', (s) => /\d+\s*일\s*차|\b(day|week)\s*\d+\b/i.test(s)],
-    ['money', (s) => /돈|\d[\d,]*\s*(만\s*)?원|수익|비용|결제|유료|\$\s?\d|\b(money|paid|cost|price|revenue|income|subscription)\b/i.test(s)],
-    ['beforePay', (s) => /돈\s*쓰기\s*전|결제\s*전|\bbefore (you )?(pay|spend|buy|subscribe)/i.test(s)],
-    ['prompt', (s) => /프롬프트|prompt/i.test(s)],
+    ['free', (s) => /무료|공짜|\bfree\b|無料|タダ/i.test(s)],
+    ['summary', (s) => /정리|\b(roundup|round-up|cheat\s?sheet|summary|recap)\b|まとめ|総まとめ|要約/i.test(s)],
+    ['dayN', (s) => /\d+\s*일\s*차|\b(day|week)\s*\d+\b|\d+\s*日目/i.test(s)],
+    ['money', (s) => /돈|\d[\d,]*\s*(만\s*)?원|수익|비용|결제|유료|\$\s?\d|\b(money|paid|cost|price|revenue|income|subscription)\b|お金|\d[\d,]*\s*円|収益|有料|課金/i.test(s)],
+    ['beforePay', (s) => /돈\s*쓰기\s*전|결제\s*전|\bbefore (you )?(pay|spend|buy|subscribe)|課金する前|お金を使う前|有料の前|買う前|購入する前/i.test(s)],
+    ['prompt', (s) => /프롬프트|prompt|プロンプト/i.test(s)],
     ['list', (s) => countList(s) >= 2],
-    ['nItems', (s) => /\d+\s*(곳|가지|개|선|단계)|\b\d+\s+(free\s+)?(tools|ways|tips|steps|sites|apps|things|ideas|prompts|tricks)\b/i.test(s)],
-    ['tried', (s) => /직접\s*해|해봤|해본|\b(i tried|i tested|tried out|hands-on)\b/i.test(s)],
-    ['cta', (s) => { const ls = s.trim().split(/\n/).filter((l) => l.trim()); const last = ls.slice(-2).join(' '); return /https?:\/\/(?!t\.co\/)|👇|프롬프트|답글에|댓글에|링크|아래|\b(below|in the replies|link|prompt|reply|comments)\b/i.test(last.replace(/https?:\/\/t\.co\/\S+\s*$/, '')); }],
+    ['nItems', (s) => /\d+\s*(곳|가지|개|선|단계)|\b\d+\s+(free\s+)?(tools|ways|tips|steps|sites|apps|things|ideas|prompts|tricks)\b|\d+\s*(選|つ|個|ステップ|件)/i.test(s)],
+    ['tried', (s) => /직접\s*해|해봤|해본|\b(i tried|i tested|tried out|hands-on)\b|やってみた|試してみた|使ってみた|作ってみた/i.test(s)],
+    ['cta', (s) => { const ls = s.trim().split(/\n/).filter((l) => l.trim()); const last = ls.slice(-2).join(' '); return /https?:\/\/(?!t\.co\/)|👇|프롬프트|답글에|댓글에|링크|아래|プロンプト|返信|リプ|下記|下に|保存して|\b(below|in the replies|link|prompt|reply|comments)\b/i.test(last.replace(/https?:\/\/t\.co\/\S+\s*$/, '')); }],
   ];
   XA.HOOKS = HOOKS; XA.countList = countList;
 
@@ -387,7 +400,8 @@
 
   // 소재 추출: 소재 사전 우선, 없으면 자주 나온 단어(2회 이상)
   const TOPIC_DICT = ['AI 이미지', 'AI 영상', 'AI 음악', '이미지 생성', '썸네일', '자막', '폰트', '로고', '블로그', '노션', '쇼츠', '자동화', '부업', 'N잡', '디자인', '코딩', '엑셀', '제품 사진', '굿즈', '웹툰', '동화책', '팟캐스트', '음성', '캐릭터', '인스타', '유튜브', '챗GPT', 'GPT', '클로드', '미드저니', '제미나이', '그록', '커서', '바이브코딩', '업스케일', '배경 제거', '무료 크레딧', '콘텐츠 캘린더', '사진', '영상', '음악', '이미지',
-    'AI image', 'AI video', 'AI music', 'image generation', 'thumbnail', 'subtitles', 'captions', 'font', 'logo', 'blog', 'Notion', 'Shorts', 'automation', 'side hustle', 'design', 'coding', 'Excel', 'product photo', 'merch', 'webtoon', 'podcast', 'voice', 'character', 'Instagram', 'YouTube', 'ChatGPT', 'Claude', 'Midjourney', 'Gemini', 'Cursor', 'vibe coding', 'upscale', 'background removal', 'free credits', 'content calendar', 'newsletter', 'photo', 'video', 'music', 'image'];
+    'AI image', 'AI video', 'AI music', 'image generation', 'thumbnail', 'subtitles', 'captions', 'font', 'logo', 'blog', 'Notion', 'Shorts', 'automation', 'side hustle', 'design', 'coding', 'Excel', 'product photo', 'merch', 'webtoon', 'podcast', 'voice', 'character', 'Instagram', 'YouTube', 'ChatGPT', 'Claude', 'Midjourney', 'Gemini', 'Cursor', 'vibe coding', 'upscale', 'background removal', 'free credits', 'content calendar', 'newsletter', 'photo', 'video', 'music', 'image',
+    'AI画像', 'AI動画', 'AI音楽', '画像生成', 'サムネイル', '字幕', 'フォント', 'ロゴ', 'ブログ', 'ショート', '自動化', '副業', 'デザイン', 'コーディング', '物撮り', 'グッズ', 'ウェブトゥーン', 'ポッドキャスト', '音声', 'キャラクター', 'インスタ', 'バイブコーディング', 'アップスケール', '背景除去', '無料クレジット', 'コンテンツカレンダー', 'ニュースレター', '写真', '動画', '音楽', '画像'];
   const EN_STOP = new Set('this that with from your have just what when they them then than there their about into will would could should more most very really here also only some like make made using used use been were was are the and for you not but all can get got how why who our out one two new now today week day time post posts thread free tools tool link prompt below best first last next every still even much many need want know think going look best'.split(' '));
   function topics(list) {
     const txt = list.map((p) => p.text.replace(/https?:\/\/\S+/g, ' ')).join('\n');

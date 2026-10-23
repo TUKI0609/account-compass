@@ -43,13 +43,13 @@
     const s = input.text.trim(); const lines = s.split(/\n/).filter((l) => l.trim()); const first = (lines[0] || '').trim();
     const list = XA.countList(s); const checks = []; const own = ownData();
     // 1. 테이크어웨이
-    const tk = { prompt: /프롬프트|prompt|"[^"]{15,}"/i.test(s), list: list >= 2, steps: /단계|순서|step|방법|하는\s?법|how[\s-]to/i.test(s), link: /https?:\/\//.test(s) };
+    const tk = { prompt: /프롬프트|prompt|プロンプト|"[^"]{15,}"/i.test(s), list: list >= 2, steps: /단계|순서|step|방법|하는\s?법|how[\s-]to|手順|やり方|作り方|ステップ/i.test(s), link: /https?:\/\//.test(s) };
     const tkHas = Object.keys(tk).filter((k) => tk[k]); const tkN = tkHas.length;
     checks.push({ id: 'take', max: 30, pt: tkN >= 2 ? 30 : tkN === 1 ? 20 : 0,
       note: tkN ? t('diag.take.has', { v: tkHas.map((k) => t('diag.take.' + k)).join(', ') }) : t('diag.none'),
       fix: tkN >= 2 ? '' : tkN === 1 ? t('diag.take.fix1') : t('diag.take.fix0') });
     // 2. 첫 줄 훅 (한국어 + 영어)
-    const hookWords = [/무료|공짜|\bfree\b/i, /돈\s*쓰기\s*전|결제\s*전|before you (pay|spend|buy)/i, /\d+\s*일\s*차|\bday\s*\d+\b/i, /\d+\s*(곳|가지|개|단계|선)|\b\d+\s+(tools|ways|tips|steps|sites|apps|things|ideas|prompts)\b/i, /정리|\b(roundup|cheat\s?sheet)\b/i, /직접\s*해|\bi (tried|tested|built)\b/i, /\?$/, /^(이거|이것|아직도|모르면|stop |still |don't |if you )/i];
+    const hookWords = [/무료|공짜|\bfree\b|無料/i, /돈\s*쓰기\s*전|결제\s*전|before you (pay|spend|buy)|課金する前|お金を使う前|有料の前/i, /\d+\s*일\s*차|\bday\s*\d+\b|\d+\s*日目/i, /\d+\s*(곳|가지|개|단계|선)|\b\d+\s+(tools|ways|tips|steps|sites|apps|things|ideas|prompts)\b|\d+\s*(選|つ|個|ステップ)/i, /정리|\b(roundup|cheat\s?sheet)\b|まとめ/i, /직접\s*해|\bi (tried|tested|built)\b|やってみた|試してみた/i, /\?$|？$/, /^(이거|이것|아직도|모르면|stop |still |don't |if you |これ|まだ|知らない)/i];
     const hk = hookWords.filter((re) => re.test(first)).length; const fw = weighted(first);
     const hpt = Math.min(25, hk * 10 + (fw > 0 && fw <= 70 ? 10 : fw <= 100 ? 5 : 0));
     checks.push({ id: 'hook', max: 25, pt: hpt, note: t('diag.hook.note', { n: [...first].length, k: hk }),
@@ -81,7 +81,7 @@
     else { mpt = 4; mnote = t('diag.none'); mfix = t('diag.media.noneFix'); }
     checks.push({ id: 'media', max: 10, pt: mpt, note: mnote, fix: mfix });
     // 6. 마무리 / 형식
-    const last = lines.slice(-1)[0] || ''; const endOk = /https?:\/\/|👇|프롬프트|답글|저장|링크|\?$|\b(below|link|prompt|reply|save|bookmark)\b/i.test(last);
+    const last = lines.slice(-1)[0] || ''; const endOk = /https?:\/\/|👇|프롬프트|답글|저장|링크|プロンプト|返信|保存して|リンク|\?$|？$|\b(below|link|prompt|reply|save|bookmark)\b/i.test(last);
     let kpt = endOk ? 5 : 0, kfix = endOk ? '' : t('diag.end.fix');
     if (input.kind === 'quote') { kpt = Math.max(0, kpt - 3); kfix = (kfix ? kfix + ' ' : '') + t('diag.end.quoteFix'); }
     checks.push({ id: 'end', max: 5, pt: kpt, note: endOk ? t('diag.has') : t('diag.none'), fix: kfix });

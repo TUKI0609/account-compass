@@ -20,7 +20,7 @@
     s = String(s || '').trim(); let m;
     if ((m = s.match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/))) { const mo = MON[m[1].toLowerCase()]; if (mo) return Date.UTC(+m[3], mo - 1, +m[2]); }
     if ((m = s.match(/(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?,?\s+(\d{4})/))) { const mo = MON[m[2].toLowerCase()]; if (mo) return Date.UTC(+m[3], mo - 1, +m[1]); }
-    if ((m = s.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    if ((m = s.match(/(\d{4})\s*[-./년年]\s*(\d{1,2})\s*[-./월月]\s*(\d{1,2})/))) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
     if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return Date.UTC(+m[3], +m[1] - 1, +m[2]);
     return null;
   }

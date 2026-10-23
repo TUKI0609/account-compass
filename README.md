@@ -10,7 +10,7 @@ X(구 트위터)와 무관한 비공식 도구입니다. / Unofficial tool, not 
   모든 비교는 **올린 사람 자신의 평균** 기준입니다 (특정 계정의 수치를 기준으로 쓰지 않음).
 - **복붙 진단**: 글을 붙여 넣으면 100점 체크리스트 (프리미엄 없이 누구나). CSV를 먼저 올렸다면 그 데이터의 시간대·평균과 비교, 아니면 일반적인 경험칙.
 - **사용법**: 인라인 SVG 예시 그림으로 단계별 안내 (X 화면·로고를 복제하지 않은 일반적인 그림).
-- **한국어/English** 전환 (헤더 오른쪽 위, localStorage `xa-lang`에 저장, `<html lang>` 변경). 기본 한국어.
+- **한국어 / English / 日本語** 전환 (헤더 한가운데 分段 버튼, localStorage `xa-lang`에 저장, `<html lang>` 변경). 기본 한국어.
 - **개인정보·이용 안내**: `privacy.html`.
 
 ## 파일
@@ -41,7 +41,7 @@ cd x-analyzer && python3 -m http.server 8000   # http://localhost:8000
 - 콘텐츠(영문): Post id, Date, Post text, Post Link, Impressions, Likes, Engagements, Bookmarks, Shares, New follows, Replies, Reposts, Profile visits, Detail expands, URL Clicks, Hashtag clicks, Permalink clicks
 - 콘텐츠(한국어): 게시물 ID, 날짜, 게시물 본문, 게시물 링크, 노출수, 마음에 들어요, 참여수, 북마크, 공유 수, 새로운 팔로우, 답글, 재게시, 프로필 조회수, 세부정보 펼치기, URL 클릭수, 해시태그 클릭수, 고유 링크 클릭수
 - 개요(영문/한국어): Date, Impressions, Likes, Engagements, Bookmarks, Shares, New follows, Unfollows, Replies, Reposts, Profile visits, Create Post, Video views, Media views / 노출수, 마음에 들어요, … 언팔로우, 게시물 작성하기, 동영상 조회수, 미디어 조회수
-- 구 Tweet activity, 일본어 헤더도 일부 지원. 구분자(, ; 탭), UTF-8 BOM, EUC-KR 자동 처리.
+- 구 Tweet activity, 일본어 헤더(インプレッション, いいね, エンゲージメント, ブックマーク, 共有, 新しいフォロー, 返信, リポスト, プロフィールへのアクセス数 등, 느슨한 일치)도 지원. 구분자(, ; 탭), UTF-8 BOM, EUC-KR 자동 처리.
 - 날짜 칸에 시각이 없으면 게시물 ID(snowflake)로 작성 시각을 복원해 KST로 표시.
 - 결과 위의 **"인식한 칸"** 줄에 어떤 칸을 읽었는지 / 없는 칸 / 못 알아본 칸이 표시됩니다. X가 CSV 형식을 바꾸면 여기서 바로 드러납니다.
 

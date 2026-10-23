@@ -1,6 +1,7 @@
 """자동 테스트 (Playwright + 로컬 서버 + file://).
 - 샘플 로드 / 파서 변형(한국어·영어·일본어·구 Tweet activity) / 영어 헤더 / 영어 카테고리 규칙
-- i18n: ko 키가 전부 en에 있음, 화면에 쓰는 키가 전부 사전에 있음, 언어 토글·저장·<html lang>
+- i18n: ko 키가 전부 en·ja에 있음, 화면에 쓰는 키가 전부 사전에 있음, 언어 토글·저장·<html lang>
+- 헤더: 언어 선택기(한국어/English/日本語)가 로고와 탭 사이, 제작자 표시가 1280·1440·1024·390에서 잘리지 않음
 - 실제 데이터 흔적 없음(소유자 이름은 제작자 표시에만), file:// 동작, 외부 요청 없음
 - v2 스크린샷(가상 샘플 데이터만) → screenshots/v2_*.png
 실제 파일 회귀 테스트(선택): REAL_CONTENT=/path REAL_OVERVIEW=/path  — 실제 파일은 스크린샷을 찍지 않음.
@@ -18,7 +19,54 @@ fails = []
 def check(cond, msg):
     print(('PASS ' if cond else 'FAIL ') + msg)
     if not cond: fails.append(msg)
+def header_box(page):
+    return page.evaluate("""() => {
+      const c = document.querySelector('.topbar .credit');
+      const a = document.querySelector('.topbar .credit-btn');
+      const lang = document.querySelector('.top-in [data-lang-toggle]');
+      const brand = document.querySelector('.brand');
+      const tabs = document.querySelector('.tabs, .back-link');
+      const cr = c.getBoundingClientRect();
+      const ar = a.getBoundingClientRect();
+      const lr = lang.getBoundingClientRect();
+      const br = brand.getBoundingClientRect();
+      const tr = tabs.getBoundingClientRect();
+      const hs = c.querySelector('.handle');
+      const hr = hs.getBoundingClientRect();
+      const hit = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+      return {
+        vw: innerWidth, sw: document.documentElement.scrollWidth,
+        fs: parseFloat(getComputedStyle(c).fontSize),
+        cl: cr.left, cr: cr.right, ct: cr.top, ch: cr.height,
+        al: ar.left, aright: ar.right, aw: ar.width, ah: ar.height,
+        href: a.href, target: a.target, rel: a.rel,
+        hit: !!(hit && (hit === a || a.contains(hit))),
+        hl: hr.left, hr: hr.right, htext: hs.textContent,
+        ll: lr.left, lrgt: lr.right, lw: lr.width, lh: lr.height,
+        brnd: br.right, tl: tr.left, tb: tr.bottom,
+        labels: [...lang.querySelectorAll('button')].map(b => b.textContent),
+        cred: c.innerText.replace(/\\s+/g, ' ').trim()
+      };
+    }""")
+def check_header(page, label, mobile=False):
+    m = header_box(page)
+    check(m['sw'] <= m['vw'] + 1, f'{label} 가로 넘침 없음 (scrollWidth {m["sw"]} / {m["vw"]})')
+    inside = (m['cl'] >= -1 and m['cr'] <= m['vw'] + 1 and m['hl'] >= -1 and m['hr'] <= m['vw'] + 1
+              and m['al'] >= -1 and m['aright'] <= m['vw'] + 1 and m['ll'] >= -1 and m['lrgt'] <= m['vw'] + 1)
+    check(inside and m['htext'] == '@Ty_Tuki0609' and m['aw'] > 8 and m['hit'],
+          f'{label} 제작자·프로필 버튼이 화면 안에 다 보임 { {k: round(m[k], 1) if isinstance(m[k], float) else m[k] for k in ["cl", "cr", "hl", "hr", "al", "aright", "vw", "htext", "hit", "aw"]} }')
+    check(m['fs'] <= 12.5 and m['lw'] > 80 and m['lh'] >= 20 and m['labels'] == ['한국어', 'English', '日本語'],
+          f'{label} 언어 선택기 {m["labels"]} {m["fs"]}px {m["lw"]:.0f}x{m["lh"]:.0f}')
+    if mobile:
+        check(m['ch'] <= 32 and m['tb'] < 170, f'{label} 모바일 헤더 높이 credit={m["ch"]:.0f} tabsBottom={m["tb"]:.0f}')
+    else:
+        mid = (m['ll'] + m['lrgt']) / 2
+        check(m['ct'] < 30 and m['cr'] > m['vw'] * 0.55, f'{label} 제작자 오른쪽 위 top={m["ct"]:.0f} right={m["cr"]:.0f}')
+        check(m['brnd'] <= m['ll'] + 12 and m['lrgt'] <= m['tl'] + 12 and abs(mid - m['vw'] / 2) < 48,
+              f'{label} 언어가 로고와 탭 사이·중앙 brandR={m["brnd"]:.0f} lang={m["ll"]:.0f}-{m["lrgt"]:.0f} tabsL={m["tl"]:.0f} mid={mid:.0f}')
+    return m
 HANGUL = re.compile(r'[가-힣]')
+KANA = re.compile(r'[\u3040-\u30ff]')
 RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
 SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js']
 
@@ -51,10 +99,11 @@ try:
 
         # ---------- i18n 사전 검사 ----------
         keys = pg.evaluate("(()=>{const I=XA.I18N;const k=Object.keys(I.ko).filter(x=>!x.startsWith('_'));return {ko:k,langs:Object.keys(I),miss:Object.fromEntries(Object.keys(I).map(l=>[l,k.filter(x=>!(x in I[l]))])),meta:Object.keys(I).every(l=>I[l]._name&&I[l]._locale&&I[l]._short)}})()")
-        check(set(keys['langs']) >= {'ko', 'en'} and keys['meta'], f"언어 목록 {keys['langs']} + _name/_short/_locale")
-        check(not keys['miss']['en'], f"모든 ko 키가 en에 있음 (빠진 키 {keys['miss']['en'][:10]})")
-        en_extra = pg.evaluate("Object.keys(XA.I18N.en).filter(k=>!(k in XA.I18N.ko))")
-        check(not en_extra, f'en에만 있는 키 없음 {en_extra[:10]}')
+        check(set(keys['langs']) >= {'ko', 'en', 'ja'} and keys['meta'], f"언어 목록 {keys['langs']} + _name/_short/_locale")
+        for lang in ('en', 'ja'):
+            check(not keys['miss'][lang], f"모든 ko 키가 {lang}에 있음 (빠진 키 {keys['miss'][lang][:10]})")
+            extra = pg.evaluate(f"Object.keys(XA.I18N.{lang}).filter(k=>!(k in XA.I18N.ko))")
+            check(not extra, f'{lang}에만 있는 키 없음 {extra[:10]}')
         empty = pg.evaluate("Object.entries(XA.I18N).flatMap(([l,d])=>Object.entries(d).filter(([k,v])=>typeof v!=='string'||!v.trim()).map(([k])=>l+':'+k))")
         check(not empty, f'빈 번역 없음 {empty[:10]}')
         # 화면·코드에서 쓰는 키가 사전에 있는지 (정적 + 동적 키)
@@ -76,10 +125,13 @@ try:
         check(pg.evaluate('document.documentElement.lang') == 'ko', '기본 언어 ko, <html lang="ko">')
 
         # ---------- 제작자 표시 ----------
-        cr = pg.evaluate("""(()=>{const a=document.querySelector('.topbar .credit-btn');const c=document.querySelector('.topbar .credit');const r=c.getBoundingClientRect();
-          return {href:a.href,target:a.target,rel:a.rel,text:c.innerText.replace(/\\s+/g,' ').trim(),fs:parseFloat(getComputedStyle(c).fontSize),right:r.right,top:r.top,h:r.height,vw:innerWidth}})()""")
-        check(cr['href'] == 'https://x.com/Ty_Tuki0609' and cr['target'] == '_blank' and 'noopener' in cr['rel'], f'제작자 링크 새 탭 + noopener {cr}')
-        check('제작자: tuki(툭이) @Ty_Tuki0609' in cr['text'] and cr['fs'] <= 12.5 and cr['right'] > cr['vw'] * 0.6 and cr['top'] < 30, f"제작자 표시 작게 오른쪽 위 ({cr['text']}, {cr['fs']}px)")
+        hm = check_header(pg, '1280 ko')
+        check(hm['href'] == 'https://x.com/Ty_Tuki0609' and hm['target'] == '_blank' and 'noopener' in hm['rel'], f'제작자 링크 새 탭 + noopener')
+        check('제작자: tuki(툭이) @Ty_Tuki0609' in hm['cred'], f"제작자 표시 ({hm['cred']})")
+        for wh in ((1440, 900), (1024, 800)):
+            pg.set_viewport_size({'width': wh[0], 'height': wh[1]}); pg.wait_for_timeout(80)
+            check_header(pg, f'{wh[0]} ko')
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(80)
         check('X(구 트위터)와 무관한 비공식 도구입니다' in pg.inner_text('body'), '비공식 도구 안내 (ko)')
 
         # ---------- 홈 스크린샷 ----------
@@ -148,6 +200,31 @@ try:
         check(got == list(en_posts.values()), f'영어 카테고리 규칙 {got}')
         hk = pg.evaluate("(s)=>XA.HOOKS.filter(h=>h[1](s)).map(h=>h[0])", 'Before you pay, try these 5 free tools\n1. a\n2. b\nPrompt below 👇')
         check(set(hk) >= {'free', 'beforePay', 'prompt', 'list', 'nItems', 'cta'}, f'영어 훅 키워드 {hk}')
+        ja_posts = {
+            '課金する前にこれだけ。\n無料AI画像ツール5選\n\n1. A\n2. B\n3. C\n保存してね': 'guide',
+            'AI動画の作り方をまとめました': 'guide',
+            '副業7日目。新しいプロンプトを試してみた': 'exp',
+            '新モデルがリリース。無料ユーザーにも公開': 'news',
+            'おはよう。コーヒー飲んでから仕事。疲れた': 'daily',
+            'やばい、これすごい😂': 'quote',
+            'AIでショート動画を作りました。音あり🎬': 'video',
+        }
+        got = pg.evaluate("(arr)=>arr.map(s=>XA.categorize(s))", list(ja_posts))
+        check(got == list(ja_posts.values()), f'일본어 카테고리 규칙 {got}')
+        hk = pg.evaluate("(s)=>XA.HOOKS.filter(h=>h[1](s)).map(h=>h[0])", '課金する前に、無料ツールを5つ\n1. a\n2. b\nプロンプトは下に👇')
+        check(set(hk) >= {'free', 'beforePay', 'prompt', 'list', 'nItems', 'cta'}, f'일본어 훅 키워드 {hk}')
+        ja_c = 'ポストID,日付,インプレッション数,いいね,エンゲージメント,ブックマーク,共有,新しいフォロー,返信,リポスト,プロフィールへのアクセス数,詳細のクリック数,URLのクリック数,ハッシュタグのクリック数,固定リンクのクリック数\n2106242921259557181,2026-10-03,10,1,2,7,8,9,11,12,13,3,4,5,6\n'
+        r = pg.evaluate("(t)=>{const A=XA.analyze(XA.parseCSV(t));const p=A.posts[0];return {mode:A.mode||'content',un:A.unmapped,n:Object.keys(A.map).length,v:[p.imp,p.likes,p.eng,p.bm,p.shares,p.nf,p.rep,p.rt,p.prof,p.det,p.url,p.tag,p.plink]}}", ja_c)
+        check(r['mode'] == 'content' and r['un'] == [] and r['n'] == 15 and r['v'] == [10, 1, 2, 7, 8, 9, 11, 12, 13, 3, 4, 5, 6], f'일본어 콘텐츠 헤더 15칸 {r}')
+        ja_ov = '日付,インプレッション数,いいね,エンゲージメント,ブックマーク,共有,新しいフォロー,フォロー解除,返信,リポスト,プロフィールへのアクセス数,ポスト,動画再生数,メディアの再生数\n2026年10月1日,1000,10,20,1,1,5,2,3,4,30,2,70,80\n'
+        r = pg.evaluate("(t)=>{const A=XA.analyze(XA.parseCSV(t));const d=A.days[0];return {mode:A.mode,un:A.unmapped,n:Object.keys(A.map).length,d:[d.imp,d.likes,d.eng,d.bm,d.shares,d.nf,d.unf,d.rep,d.rt,d.prof,d.posts,d.vid,d.media]}}", ja_ov)
+        check(r['mode'] == 'overview' and r['un'] == [] and r['n'] == 14 and r['d'] == [1000, 10, 20, 1, 1, 5, 2, 3, 4, 30, 2, 70, 80], f'일본어 개요 헤더·年月日 {r}')
+        ja_loose = '投稿ID,投稿日時,ポスト本文,ポストのリンク,表示回数,いいね数,エンゲージメント数,ブックマーク数,シェア,新規フォロー,リプライ,リツイート,プロフィールアクセス\n2106242921259557181,2026-10-03 09:00,まとめ,https://x.com/a/status/2106242921259557181,10,1,2,7,8,9,11,12,13\n'
+        r = pg.evaluate("(t)=>{const A=XA.analyze(XA.parseCSV(t));const p=A.posts[0];return {un:A.unmapped,n:Object.keys(A.map).length,v:[p.imp,p.likes,p.eng,p.bm,p.shares,p.nf,p.rep,p.rt,p.prof],text:p.text}}", ja_loose)
+        check(r['un'] == [] and r['n'] == 13 and r['v'] == [10, 1, 2, 7, 8, 9, 11, 12, 13] and r['text'] == 'まとめ', f'일본어 헤더 느슨한 별칭 {r}')
+        ja_old = 'ツイートID,ツイートの固定リンク,ツイート本文,時間,インプレッション,エンゲージメント,エンゲージメント率,リツイート,返信,いいね,ユーザープロフィールクリック,URLクリック数,ハッシュタグクリック,詳細クリック,固定リンクのクリック数,メディアの再生数,プロモのインプレッション\n1100000000000000000,https://twitter.com/a/status/1100000000000000000,今日のランチ,2019-02-25 14:05 +0000,500,10,0.02,1,1,5,1,0,0,2,3,4,999\n'
+        r = pg.evaluate("(t)=>{const rows=XA.parseCSV(t);const A=XA.analyze(rows);const p=A.posts[0];const mi=A.map.media;return {un:A.unmapped,cat:p.cat,imp:p.imp,eng:p.eng,likes:p.likes,rt:p.rt,rep:p.rep,prof:p.prof,url:p.url,det:p.det,plink:p.plink,media:mi!=null?rows[1][mi]:null}}", ja_old)
+        check(r['imp'] == 500 and r['eng'] == 10 and r['likes'] == 5 and r['rt'] == 1 and r['rep'] == 1 and r['prof'] == 1 and r['det'] == 2 and r['plink'] == 3 and r['media'] == '4' and r['cat'] == 'daily' and all('プロモ' in u or '率' in u for u in r['un']), f'일본어 구 트윗 액티비티(프로모·率 제외) {r}')
 
         # ---------- 개요 샘플 ----------
         pg.click('#btn-sample-ov'); pg.wait_for_selector('#overview:not([hidden])'); pg.wait_for_timeout(300)
@@ -194,6 +271,11 @@ try:
         pg.screenshot(path=f'{SHOT}/v2_06_results_en.png')
         pg.reload(); pg.wait_for_timeout(400)
         check(pg.evaluate('document.documentElement.lang') == 'en' and 'Account Compass' in pg.inner_text('.brand'), '새로고침 후 EN 유지')
+        check('Made by tuki(툭이) @Ty_Tuki0609' in re.sub(r'\s+', ' ', pg.inner_text('.topbar')), 'EN 제작자 표시')
+        for wh in ((1280, 900), (1024, 800)):
+            pg.set_viewport_size({'width': wh[0], 'height': wh[1]}); pg.wait_for_timeout(60)
+            check_header(pg, f'{wh[0]} en')
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
         pg.screenshot(path=f'{SHOT}/v2_04_home_en.png')
         pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(200)
         h_en = pg.inner_text('#tab-help')
@@ -212,6 +294,33 @@ try:
         ptx = pg.inner_text('body'); check('브라우저 안에서만' in ptx and '쿠키' in ptx and pg.evaluate('document.documentElement.lang') == 'ko', 'KO 개인정보 페이지 + 다시 ko')
         pg.goto(URL); pg.wait_for_timeout(200)
         check(pg.evaluate('document.documentElement.lang') == 'ko', 'ko 선택도 저장됨')
+
+        # ---------- 일본어 UI ----------
+        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])'); pg.wait_for_timeout(400)
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(400)
+        check(pg.evaluate('document.documentElement.lang') == 'ja' and pg.evaluate("localStorage.getItem('xa-lang')") == 'ja', 'JA 전환: <html lang=ja> + localStorage')
+        check('制作者:' in re.sub(r'\s+', ' ', pg.inner_text('.topbar')) and 'X（旧Twitter）とは無関係の非公式ツールです' in pg.inner_text('body'), '일본어 비공식 안내 + 제작자 표시')
+        check(KANA.search(pg.inner_text('h1')) and not HANGUL.search(pg.inner_text('.hero')) and not HANGUL.search(pg.inner_text('.tabs')), 'JA 히어로·탭에 한글 없음, 가나 있음')
+        for sel in ['#summary', '#cat-table', '#hook-table', '#col-info', '.tabs', '#suggest', '#rank-metric', '#heat-metric', '#time-src', '#hour-blocks']:
+            tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);return e.textContent}})()")
+            check(not HANGUL.search(tx), f'JA 모드 {sel} 한글 없음 {HANGUL.findall(tx)[:5]}')
+        check(not RAWKEY.search(pg.inner_text('body')), f'JA 모드 빠진 번역 키 노출 없음 {RAWKEY.findall(pg.inner_text("body"))[:5]}')
+        for wh in ((1280, 900), (1440, 900), (1024, 800)):
+            pg.set_viewport_size({'width': wh[0], 'height': wh[1]}); pg.wait_for_timeout(60)
+            check_header(pg, f'{wh[0]} ja')
+        pg.set_viewport_size({'width': 1280, 'height': 900})
+        pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(150)
+        h_ja = pg.inner_text('#tab-help')
+        check(not HANGUL.search(h_ja) and KANA.search(h_ja) and all(s in h_ja for s in ['Premium+', 'Basic', '2026年10月', '認証済み組織']), f'JA 사용법 {HANGUL.findall(h_ja)[:5]}')
+        pg.click('.tab[data-tab=diag]'); pg.click('#d-ex'); pg.click('#d-run'); pg.wait_for_timeout(200)
+        sc = int(pg.text_content('.ring text')); dtx = pg.inner_text('#d-result')
+        check(sc >= 80 and not HANGUL.search(dtx) and KANA.search(dtx), f'JA 진단 (예시 {sc}점)')
+        pg.goto(URL + 'privacy.html'); pg.wait_for_timeout(200)
+        ptx = pg.inner_text('.prose'); check('プライバシー' in ptx and not HANGUL.search(ptx) and not RAWKEY.search(ptx) and pg.evaluate('document.documentElement.lang') == 'ja', 'JA 개인정보 페이지')
+        check_header(pg, '1280 ja privacy')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
+        check(pg.evaluate('document.documentElement.lang') == 'ko', 'JA 다음 다시 ko')
+        pg.goto(URL); pg.wait_for_timeout(200)
         check(not errs, f'콘솔 에러 없음 {errs}')
         check(not ext, f'외부 요청 없음 {ext}')
 
@@ -293,8 +402,7 @@ try:
         m = b.new_page(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
         merr = []; m.on('pageerror', lambda e: merr.append(str(e)))
         m.goto(URL); m.wait_for_timeout(300)
-        mc = m.evaluate("(()=>{const c=document.querySelector('.topbar .credit').getBoundingClientRect();const t=document.querySelector('.tabs').getBoundingClientRect();return {cr:c.right,ct:c.top,ch:c.height,tb:t.bottom,vw:innerWidth}})()")
-        check(mc['cr'] <= mc['vw'] and mc['ch'] <= 32 and mc['tb'] < 160, f'모바일 헤더: 제작자 한두 줄 + 탭 ({mc})')
+        check_header(m, '390 ko', mobile=True)
         m.screenshot(path=f'{SHOT}/v2_05_mobile.png')
         m.click('#btn-sample'); m.wait_for_selector('#results:not([hidden])'); m.wait_for_timeout(800)
         ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 가로 넘침 없음 (scrollWidth {ow})')
@@ -305,7 +413,12 @@ try:
         m.screenshot(path=f'{SHOT}/v2_05c_mobile_howto.png', full_page=True)
         m.click('[data-lang-toggle] button[data-lang=en]'); m.wait_for_timeout(200); m.evaluate('window.scrollTo(0,0)')
         ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 EN 가로 넘침 없음 ({ow})')
+        check_header(m, '390 en', mobile=True)
         m.screenshot(path=f'{SHOT}/v2_05d_mobile_en.png')
+        m.click('[data-lang-toggle] button[data-lang=ja]'); m.wait_for_timeout(200); m.evaluate('window.scrollTo(0,0)')
+        ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 JA 가로 넘침 없음 ({ow})')
+        check_header(m, '390 ja', mobile=True)
+        check(KANA.search(m.inner_text('body')) and m.evaluate('document.documentElement.lang') == 'ja', '모바일 JA 언어')
         m.click('.tab[data-tab=diag]'); m.click('#d-ex'); m.click('#d-run'); m.wait_for_timeout(200)
         check(not merr, f'모바일 에러 없음 {merr}')
         b.close()

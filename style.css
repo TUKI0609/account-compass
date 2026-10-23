@@ -1,23 +1,29 @@
 [hidden]{display:none!important}
 :root{--bg:#f6f7fb;--card:#fff;--ink:#14171a;--muted:#5f6b7a;--line:#e6e9ef;--pri:#4f46e5;--pri2:#4338ca;--pri-soft:#eef2ff;--good:#17a34a;--bad:#e5484d;--warn:#f59e0b;--r:14px}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic","Segoe UI",sans-serif;line-height:1.55;-webkit-text-size-adjust:100%}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Meiryo","Noto Sans JP","Noto Sans CJK JP","Segoe UI",sans-serif;line-height:1.55;-webkit-text-size-adjust:100%}
 body{word-break:keep-all;overflow-wrap:anywhere}
 a{color:var(--pri2)}
 .wrap{max-width:1040px;margin:0 auto;padding:0 16px}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:#f1f5f9;padding:0 4px;border-radius:4px}
 
-/* 헤더 */
+/* 헤더: 위쪽 작은 제작자 표시, 본줄은 로고 | 언어 | 탭 */
 .top{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding-top:6px;font-size:11.5px;color:var(--muted)}
-.credit{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;line-height:1.3}
+.topbar{display:flex;justify-content:flex-end;align-items:flex-start;gap:8px;padding-top:6px;font-size:11.5px;color:var(--muted);max-width:100%;min-width:0}
+.credit{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;flex-wrap:wrap;line-height:1.3;max-width:100%;min-width:0}
 .credit .handle{color:#475569}
-.credit-btn{display:inline-block;font-size:10.5px;font-weight:700;text-decoration:none;color:var(--pri2);background:var(--pri-soft);border:1px solid #dfe3ff;border-radius:99px;padding:1px 7px;margin-left:2px}
+.credit-btn{display:inline-block;font-size:10.5px;font-weight:700;text-decoration:none;color:var(--pri2);background:var(--pri-soft);border:1px solid #dfe3ff;border-radius:99px;padding:1px 7px;margin-left:2px;white-space:nowrap}
 .credit-btn:hover{background:#e0e7ff}
-.lang{display:inline-flex;border:1px solid var(--line);border-radius:99px;overflow:hidden;background:#fff}
-.lang button{border:0;background:transparent;font:inherit;font-size:11px;font-weight:700;color:var(--muted);padding:2px 9px;cursor:pointer}
+.lang{display:inline-flex;border:1px solid #c7d2fe;border-radius:99px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(79,70,229,.12);flex:0 1 auto;max-width:100%}
+.lang button{border:0;background:transparent;font:inherit;font-size:13px;font-weight:800;color:#334155;padding:6px 12px;cursor:pointer;white-space:nowrap;letter-spacing:-.01em}
+.lang button+button{border-left:1px solid var(--line)}
 .lang button.on{background:var(--ink);color:#fff}
-.top-in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;flex-wrap:wrap;padding-bottom:4px}
+.lang button:hover:not(.on){background:#eef2ff}
+.top-in{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:12px;row-gap:6px;min-height:52px;padding:2px 0 8px}
+.brand{justify-self:start;min-width:0}
+.top-in>.lang{justify-self:center}
+.tabs{justify-self:end;min-width:0}
+.back-link{justify-self:end;white-space:nowrap}
 .brand{font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none}
 .logo{display:inline-grid;place-items:center;width:30px;height:30px}
 .logo svg{display:block}
@@ -103,10 +109,18 @@ textarea{width:100%;resize:vertical;min-height:150px}
 .step-n{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;background:var(--pri);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;z-index:1}
 .ill{display:block;width:100%;height:auto;border-radius:10px;background:#f8fafc}
 
+@media (max-width:980px){
+  .top-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;min-height:0;gap:6px 8px}
+  .brand{flex:1 1 auto}
+  .top-in>.lang{order:3;flex:1 1 100%;justify-content:center}
+  .tabs{order:4;width:100%;justify-content:space-between}
+  .back-link{order:2;margin-left:auto}
+}
 @media (max-width:640px){
   h1{font-size:20px}.tabs{width:100%;justify-content:space-between}.tab{flex:1;padding:8px 4px;font-size:13.5px}
   .top-in{padding:2px 0 6px;min-height:0;gap:6px}.brand{font-size:16px}.kpi .v{font-size:20px}.card{padding:14px}
   .topbar{font-size:10.5px;gap:6px}.credit-btn{font-size:10px;padding:0 6px}
+  .lang button{font-size:12.5px;padding:5px 10px}
   .steps{grid-template-columns:1fr 1fr}.step{padding:10px}.step h3{font-size:14px}
 }
 @media (max-width:420px){.steps{grid-template-columns:1fr}}
