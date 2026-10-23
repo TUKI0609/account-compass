@@ -6,7 +6,7 @@
 - v2 스크린샷(가상 샘플 데이터만) → screenshots/v2_*.png
 실제 파일 회귀 테스트(선택): REAL_CONTENT=/path REAL_OVERVIEW=/path  — 실제 파일은 스크린샷을 찍지 않음.
 실행: .venv/bin/python tools/test.py   (x-analyzer 폴더 또는 그 상위 폴더에서)"""
-import subprocess, time, sys, json, os, re, glob
+import subprocess, time, sys, json, os, re, glob, struct
 from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOT = f'{ROOT}/screenshots'
@@ -85,6 +85,22 @@ check(not bad_owner, f'소유자 이름은 제작자 표시 줄에만 {bad_owner
 check(not bad_phr, f'실제 데이터 기준 문구 없음 {bad_phr}')
 check(not glob.glob(f'{ROOT}/screenshots/real_*'), '사이트 폴더에 real_* 스크린샷 없음')
 check('𝕏' not in ''.join(open(os.path.join(ROOT, f), encoding='utf-8').read() for f in SITE_FILES), 'X 로고 문자(𝕏) 없음')
+idx_html = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
+priv_html = open(os.path.join(ROOT, 'privacy.html'), encoding='utf-8').read()
+OG = 'https://tuki0609.github.io/account-compass/og-image.png'
+for name, src in (('index', idx_html), ('privacy', priv_html)):
+    for s in [f'property="og:image" content="{OG}"', 'name="twitter:card" content="summary_large_image"',
+              'name="twitter:creator" content="@Ty_Tuki0609"', 'property="og:locale" content="ko_KR"',
+              'property="og:locale:alternate" content="en_US"', 'property="og:locale:alternate" content="ja_JP"',
+              'property="og:image:width" content="1200"', 'property="og:image:height" content="630"',
+              'property="og:image:alt"', f'name="twitter:image" content="{OG}"', 'name="twitter:image:alt"']:
+        check(s in src, f'{name} 메타 {s[:56]}')
+check('property="og:url" content="https://tuki0609.github.io/account-compass/"' in idx_html, 'index og:url')
+check('property="og:url" content="https://tuki0609.github.io/account-compass/privacy.html"' in priv_html, 'privacy og:url')
+og_path = os.path.join(ROOT, 'og-image.png')
+og_raw = open(og_path, 'rb').read()
+og_w, og_h = struct.unpack('>II', og_raw[16:24])
+check(og_raw[:8] == b'\x89PNG\r\n\x1a\n' and og_w == 1200 and og_h == 630 and len(og_raw) < 1_000_000, f'og-image {og_w}x{og_h} {len(og_raw)}B')
 
 try:
     with sync_playwright() as p:
@@ -250,10 +266,21 @@ try:
         check(int(pg.text_content('.ring text')) < 40, '인용 리액션 짧은 글 낮은 점수')
 
         # ---------- 사용법 ----------
+        pg.click('.tab[data-tab=csv]')
+        pg.click('.beginner-cta'); pg.wait_for_timeout(150)
+        check('active' in (pg.get_attribute('#tab-help', 'class') or ''), '처음이에요 링크가 사용법을 연다')
+        pg.click('.tab[data-tab=csv]')
+        pg.click('.beginner-cta.alt'); pg.wait_for_timeout(150)
+        check('active' in (pg.get_attribute('#tab-diag', 'class') or ''), '무료 복붙 진단 바로가기')
+        pg.click('.tab[data-tab=csv]')
+        home = pg.inner_text('#tab-csv')
+        check('처음이에요' in home and '복붙 진단' in pg.inner_text('.beginner') and 'PC 웹' in home, '첫 화면에 사용법·복붙 진단·PC 안내')
         pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(200)
         htxt = pg.inner_text('#tab-help')
         check(pg.locator('#tab-help svg.ill').count() == 7, f"사용법 그림 7개 ({pg.locator('#tab-help svg.ill').count()})")
-        for s in ['Premium', 'Premium+', 'Basic', '인증 조직', '2026년 10월', '예시 그림', 'PC 웹이 가장 쉬워요', '인식한 칸', '복붙 진단']:
+        check(pg.locator('#tab-help .dl-ico').count() >= 1 and pg.locator('#tab-help .note.warn').count() == 1, '본문 다운로드 아이콘 + 모바일 안내')
+        for s in ['Premium', 'Premium+', 'Basic', '인증 조직', '2026년 10월', '예시 그림', 'PC 웹이 가장 쉬워요', '인식한 칸', '복붙 진단',
+                  '7D', '4W', '다운로드 아이콘', '콘텐츠', '요약', '모바일 앱', 'account_analytics', '프로필 메뉴']:
             check(s in htxt, f'사용법에 "{s}"')
         pg.screenshot(path=f'{SHOT}/v2_02_howto.png', full_page=True)
 
@@ -280,7 +307,9 @@ try:
         pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(200)
         h_en = pg.inner_text('#tab-help')
         check(not HANGUL.search(h_en), f'EN 사용법 한글 없음 {HANGUL.findall(h_en)[:5]}')
-        check(all(s in h_en for s in ['Premium+', 'verified organizations', 'Basic', 'October 2026', 'Illustrative', 'Desktop web is easiest']), 'EN 사용법 핵심 안내')
+        check(all(s in h_en for s in ['Premium+', 'verified organizations', 'Basic', 'October 2026', 'Illustrative', 'Desktop web is easiest', 'download icon', '7D', '4W', 'mobile app', 'account_analytics', 'Summary']), 'EN 사용법 핵심 안내')
+        beg = pg.text_content('.beginner') or ''
+        check('New here?' in beg and 'Paste check' in beg and not HANGUL.search(beg), 'EN 첫 화면 사용법·복붙 진단')
         pg.screenshot(path=f'{SHOT}/v2_02b_howto_en.png', full_page=True)
         pg.click('.tab[data-tab=diag]'); pg.click('#d-ex'); pg.click('#d-run'); pg.wait_for_timeout(200)
         sc = int(pg.text_content('.ring text')); dtx = pg.inner_text('#d-result')
@@ -311,7 +340,9 @@ try:
         pg.set_viewport_size({'width': 1280, 'height': 900})
         pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(150)
         h_ja = pg.inner_text('#tab-help')
-        check(not HANGUL.search(h_ja) and KANA.search(h_ja) and all(s in h_ja for s in ['Premium+', 'Basic', '2026年10月', '認証済み組織']), f'JA 사용법 {HANGUL.findall(h_ja)[:5]}')
+        check(not HANGUL.search(h_ja) and KANA.search(h_ja) and all(s in h_ja for s in ['Premium+', 'Basic', '2026年10月', '認証済み組織', 'ダウンロード', '7D', '4W', 'モバイル', 'account_analytics', '要約', 'コンテンツ']), f'JA 사용법 {HANGUL.findall(h_ja)[:5]}')
+        beg = pg.text_content('.beginner') or ''
+        check(not HANGUL.search(beg) and '初めて' in beg, 'JA 첫 화면 사용법 링크')
         pg.click('.tab[data-tab=diag]'); pg.click('#d-ex'); pg.click('#d-run'); pg.wait_for_timeout(200)
         sc = int(pg.text_content('.ring text')); dtx = pg.inner_text('#d-result')
         check(sc >= 80 and not HANGUL.search(dtx) and KANA.search(dtx), f'JA 진단 (예시 {sc}점)')

@@ -45,10 +45,11 @@ cd x-analyzer && python3 -m http.server 8000   # http://localhost:8000
 - 날짜 칸에 시각이 없으면 게시물 ID(snowflake)로 작성 시각을 복원해 KST로 표시.
 - 결과 위의 **"인식한 칸"** 줄에 어떤 칸을 읽었는지 / 없는 칸 / 못 알아본 칸이 표시됩니다. X가 CSV 형식을 바꾸면 여기서 바로 드러납니다.
 
-## CSV 내보내기 조건 (2026-10 기준, 반드시 본인 계정에서 확인)
-- 애널리틱스 CSV 내보내기는 X **Premium / Premium+** 구독자(또는 인증 조직)만 가능, Basic·무료 계정은 불가 → 복붙 진단 사용.
-- X가 2026년 10월에 요금제 이름을 바꿨기 때문에 표기·조건이 다를 수 있습니다.
-- PC 웹(x.com/i/account_analytics)이 가장 쉽습니다.
+## CSV를 받는 방법 (2026-10 기준, 반드시 본인 계정에서 확인)
+- PC 브라우저에서 [https://x.com/i/account_analytics](https://x.com/i/account_analytics) 를 연 뒤, **콘텐츠** 탭(글별) 또는 **요약** 탭(하루 단위, 계정 개요)에서 기간(7D / 2W / 4W / 3M / 1Y)을 고르고, 그 **오른쪽 끝의 ⬇ 다운로드 아이콘**을 누릅니다. “내보내기”라는 글자 버튼은 없습니다.
+- 이 아이콘은 X **모바일 앱·모바일 웹에 나오지 않습니다.** PC에서 받으세요. 태블릿·휴대폰의 데스크톱 모드는 보장하지 않습니다.
+- CSV 다운로드는 X **Premium / Premium+** 구독자(또는 인증 조직)만 가능하고, Basic·무료 계정은 불가 → 복붙 진단 사용.
+- X가 2026년 10월에 요금제 이름을 바꿨기 때문에 표기·조건이 다를 수 있습니다. 안 열리면 프로필 메뉴에서 애널리틱스를 찾으세요.
 
 ## 배포 (빌드 없음 — 폴더 그대로 올리기)
 배포에 필요한 파일: `index.html privacy.html style.css i18n.js app.js overview.js diag.js samples.js sample.csv sample_overview.csv` (tools/·screenshots/ 불필요)

@@ -3,8 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>계정 나침반 · X 애널리틱스 CSV 분석기 (비공식·무료)</title>
-<meta name="description" content="X 애널리틱스 CSV를 브라우저 안에서만 분석해 계정 방향을 찾아주는 무료 비공식 도구. 파일은 어디에도 업로드되지 않아요.">
+<title>계정 나침반 · 내 X 계정, 데이터로 3분 진단</title>
+<meta name="description" content="무료 · 가입 없음 · 브라우저에서만 처리. X 애널리틱스 CSV로 계정 방향을 찾아요. 비공식 도구.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="계정 나침반">
+<meta property="og:title" content="내 X 계정, 데이터로 3분 진단">
+<meta property="og:description" content="무료 · 가입 없음 · 브라우저에서만 처리. X 애널리틱스 CSV로 계정 방향을 찾아요. 비공식 도구.">
+<meta property="og:url" content="https://tuki0609.github.io/account-compass/">
+<meta property="og:image" content="https://tuki0609.github.io/account-compass/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="계정 나침반: 내 X 계정, 데이터로 3분 진단. 무료, 가입 없음, 브라우저에서만 처리. 비공식 도구.">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="내 X 계정, 데이터로 3분 진단">
+<meta name="twitter:description" content="무료 · 가입 없음 · 브라우저에서만 처리. X 애널리틱스 CSV로 계정 방향을 찾아요. 비공식 도구.">
+<meta name="twitter:image" content="https://tuki0609.github.io/account-compass/og-image.png">
+<meta name="twitter:image:alt" content="계정 나침반: 내 X 계정, 데이터로 3분 진단. 무료, 가입 없음, 브라우저에서만 처리. 비공식 도구.">
+<meta name="twitter:creator" content="@Ty_Tuki0609">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M16 6l4 10-4 10-4-10z' fill='%23fff'/%3E%3Cpath d='M16 16l4 0-4 10z' fill='%23c7d2fe'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -41,10 +59,14 @@
         <div class="muted small" data-i18n="drop.sub"></div>
         <input type="file" id="file" accept=".csv,text/csv,text/plain" hidden>
       </div>
+      <div class="beginner">
+        <a class="beginner-cta" href="#" data-goto="help" data-i18n="home.howto">처음이에요? 사용법 보기</a>
+        <a class="beginner-cta alt" href="#" data-goto="diag" data-i18n="home.diag">무료 · 복붙 진단 (Premium 없이)</a>
+      </div>
+      <p class="muted small beginner-note" data-i18n-html="home.note"></p>
       <div class="row gap wrap-row">
         <button id="btn-sample" class="btn ghost" data-sample="sample.csv" data-i18n="btn.sample"></button>
         <button id="btn-sample-ov" class="btn ghost" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
-        <a class="link small" href="#" data-goto="help" data-i18n="link.where"></a>
       </div>
       <p class="muted small unofficial" data-i18n="notice.unofficial"></p>
       <div id="csv-error" class="alert" hidden></div>
@@ -162,6 +184,7 @@
         <a href="#path-b" class="path"><b data-i18n="howto.pathB.short"></b><span class="muted small" data-i18n="howto.pathB.who"></span></a>
       </div>
     </div>
+    <div class="note warn" data-i18n-html="howto.pc"></div>
 
     <h2 id="path-a" data-i18n="howto.pathA.h"></h2>
     <p class="ill-note" data-i18n="howto.illNote"></p>
@@ -190,39 +213,58 @@
         </svg>
         <h3 data-i18n="howto.a1.t"></h3><p class="small" data-i18n-html="howto.a1.d"></p>
       </li>
-      <li class="step card">
+      <li class="step card wide">
         <div class="step-n">2</div>
-        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
-          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
-          <rect x="22" y="20" width="96" height="28" rx="14" fill="#f1f5f9"/>
-          <text x="70" y="38" font-size="11" text-anchor="middle" fill="#475569" data-i18n="ill.overview">개요</text>
-          <rect x="126" y="20" width="96" height="28" rx="14" fill="#eef2ff" stroke="#4f46e5" stroke-width="2"/>
-          <text x="174" y="38" font-size="11" font-weight="700" text-anchor="middle" fill="#3730a3" data-i18n="ill.content">콘텐츠</text>
-          <rect x="230" y="20" width="70" height="28" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-dasharray="3 3"/>
-          <g fill="#e2e8f0"><rect x="22" y="64" width="276" height="1"/><rect x="22" y="94" width="276" height="1"/><rect x="22" y="124" width="276" height="1"/><rect x="22" y="154" width="276" height="1"/></g>
-          <g fill="#cbd5e1"><rect x="22" y="74" width="150" height="8" rx="4"/><rect x="22" y="104" width="120" height="8" rx="4"/><rect x="22" y="134" width="160" height="8" rx="4"/><rect x="22" y="164" width="100" height="8" rx="4"/></g>
-          <g fill="#94a3b8"><rect x="214" y="74" width="30" height="8" rx="4"/><rect x="258" y="74" width="40" height="8" rx="4"/><rect x="214" y="104" width="30" height="8" rx="4"/><rect x="258" y="104" width="40" height="8" rx="4"/><rect x="214" y="134" width="30" height="8" rx="4"/><rect x="258" y="134" width="40" height="8" rx="4"/><rect x="214" y="164" width="30" height="8" rx="4"/><rect x="258" y="164" width="40" height="8" rx="4"/></g>
-          <path d="M196 40l0 20 5-5 4 9 4-2-4-9 7 0z" fill="#111827" stroke="#fff" stroke-width="1.2"/>
+        <svg class="ill" viewBox="0 0 640 220" role="img" aria-hidden="true">
+          <rect x="4" y="4" width="632" height="212" rx="12" fill="#fff" stroke="#cbd5e1"/>
+          <text x="20" y="36" font-size="18" font-weight="800" fill="#0f1419" data-i18n="ill.analytics">애널리틱스</text>
+          <line x1="16" y1="108" x2="624" y2="108" stroke="#e6e9ef"/>
+          <text x="68" y="86" font-size="15" text-anchor="middle" fill="#64748b" data-i18n="ill.tabSum">요약</text>
+          <text x="158" y="86" font-size="14" text-anchor="middle" fill="#64748b" data-i18n="ill.tabAud">오디언스</text>
+          <rect x="236" y="62" width="108" height="40" rx="8" fill="#fff7ed" stroke="#f59e0b" stroke-width="2.4"/>
+          <text x="290" y="88" font-size="15" font-weight="800" text-anchor="middle" fill="#0f1419" data-i18n="ill.content">콘텐츠</text>
+          <rect x="252" y="104" width="76" height="4" rx="2" fill="#4f46e5"/>
+          <text x="404" y="86" font-size="15" text-anchor="middle" fill="#64748b" data-i18n="ill.tabVideo">동영상</text>
+          <text x="508" y="86" font-size="15" text-anchor="middle" fill="#64748b" data-i18n="ill.tabLive">라이브</text>
+          <text x="596" y="86" font-size="15" text-anchor="middle" fill="#64748b" data-i18n="ill.tabSpace">스페이스</text>
+          <path d="M290 118v22" stroke="#4f46e5" stroke-width="2.2" fill="none"/>
+          <path d="M282 132l8 12 8-12" fill="#4f46e5"/>
+          <text x="318" y="164" font-size="16" font-weight="800" fill="#3730a3" data-i18n="ill.forPosts">👉 글별 CSV는 이 탭</text>
+          <g fill="#e2e8f0"><rect x="20" y="182" width="250" height="8" rx="4"/><rect x="290" y="182" width="140" height="8" rx="4"/></g>
+          <g fill="#cbd5e1"><rect x="450" y="182" width="70" height="8" rx="4"/><rect x="534" y="182" width="86" height="8" rx="4"/></g>
         </svg>
         <h3 data-i18n="howto.a2.t"></h3><p class="small" data-i18n-html="howto.a2.d"></p>
       </li>
-      <li class="step card">
+      <li class="step card wide">
         <div class="step-n">3</div>
-        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
-          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
-          <rect x="22" y="22" width="110" height="28" rx="8" fill="#fff" stroke="#cbd5e1"/>
-          <text x="32" y="40" font-size="10.5" fill="#334155" data-i18n="ill.period">최근 28일</text><path d="M118 33l4 5 4-5" fill="none" stroke="#64748b" stroke-width="1.6"/>
-          <rect x="190" y="20" width="110" height="32" rx="16" fill="#4f46e5"/>
-          <path d="M208 28v10m-4-4l4 4 4-4M203 42h10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          <text x="222" y="40" font-size="11" font-weight="700" fill="#fff" data-i18n="ill.export">내보내기</text>
-          <rect x="186" y="16" width="118" height="40" rx="20" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4 3"/>
-          <path d="M245 60 C 245 90, 200 95, 178 112" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4"/>
-          <path d="M184 104l-7 9 11 1" fill="none" stroke="#94a3b8" stroke-width="2"/>
-          <path d="M120 100h40l14 14v52a6 6 0 0 1-6 6h-48a6 6 0 0 1-6-6v-60a6 6 0 0 1 6-6z" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
-          <path d="M160 100v14h14" fill="none" stroke="#16a34a" stroke-width="1.6"/>
-          <rect x="122" y="130" width="40" height="16" rx="4" fill="#16a34a"/><text x="142" y="142" font-size="10" font-weight="800" text-anchor="middle" fill="#fff">CSV</text>
-          <text x="144" y="186" font-size="9" text-anchor="middle" fill="#475569">.csv</text>
-          <g fill="#e2e8f0"><rect x="22" y="70" width="70" height="7" rx="3.5"/><rect x="22" y="86" width="56" height="7" rx="3.5"/><rect x="22" y="102" width="64" height="7" rx="3.5"/></g>
+        <svg class="ill" viewBox="0 0 640 240" role="img" aria-hidden="true">
+          <rect x="4" y="4" width="632" height="232" rx="12" fill="#fff" stroke="#cbd5e1"/>
+          <text x="20" y="36" font-size="18" font-weight="800" fill="#0f1419" data-i18n="ill.account">계정 개요</text>
+          <rect x="20" y="54" width="124" height="36" rx="18" fill="#fff" stroke="#e2e8f0"/>
+          <circle cx="42" cy="72" r="8" fill="none" stroke="#64748b" stroke-width="1.5"/>
+          <path d="M38.4 72.2l2.6 2.6 5-5.2" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="56" y="77" font-size="13" fill="#334155" data-i18n="ill.verified">인증됨</text>
+          <circle cx="176" cy="72" r="17" fill="#fff" stroke="#e2e8f0"/>
+          <rect x="167" y="66" width="18" height="13" rx="2" fill="none" stroke="#0f1419" stroke-width="1.5"/>
+          <line x1="167" y1="71" x2="185" y2="71" stroke="#0f1419" stroke-width="1.3"/>
+          <line x1="172" y1="62" x2="172" y2="68" stroke="#0f1419" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="181" y1="62" x2="181" y2="68" stroke="#0f1419" stroke-width="1.5" stroke-linecap="round"/>
+          <g font-size="14" font-weight="700" text-anchor="middle">
+            <rect x="204" y="54" width="52" height="36" rx="18" fill="#fff" stroke="#e2e8f0"/><text x="230" y="77" fill="#334155">7D</text>
+            <rect x="264" y="54" width="52" height="36" rx="18" fill="#fff" stroke="#e2e8f0"/><text x="290" y="77" fill="#334155">2W</text>
+            <rect x="324" y="54" width="52" height="36" rx="18" fill="#0f1419"/><text x="350" y="77" fill="#fff">4W</text>
+            <rect x="384" y="54" width="52" height="36" rx="18" fill="#fff" stroke="#e2e8f0"/><text x="410" y="77" fill="#334155">3M</text>
+            <rect x="444" y="54" width="48" height="36" rx="18" fill="#fff" stroke="#e2e8f0"/><text x="468" y="77" fill="#334155">1Y</text>
+          </g>
+          <circle cx="568" cy="72" r="18" fill="#fff" stroke="#cfd6dd" stroke-width="1.6"/>
+          <path d="M568 60.5v11" fill="none" stroke="#0f1419" stroke-width="2" stroke-linecap="round"/>
+          <path d="M563.4 67.6 568 72.2l4.6-4.6" fill="none" stroke="#0f1419" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M560 75.4h16v5a1.3 1.3 0 0 1-1.3 1.3h-13.4a1.3 1.3 0 0 1-1.3-1.3z" fill="none" stroke="#0f1419" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="568" cy="72" r="28" fill="none" stroke="#f59e0b" stroke-width="2.6" stroke-dasharray="4 3"/>
+          <text x="40" y="168" font-size="18" font-weight="800" fill="#3730a3" data-i18n="ill.tapDl">⬇ 이 아이콘</text>
+          <path d="M200 158 C 340 158, 500 130, 560 104" fill="none" stroke="#4f46e5" stroke-width="2.8" stroke-linecap="round"/>
+          <path d="M548 112l10-16 14 10z" fill="#4f46e5"/>
+          <text x="40" y="206" font-size="15" fill="#475569" data-i18n="ill.csvDown">파일이 받아져요</text>
         </svg>
         <h3 data-i18n="howto.a3.t"></h3><p class="small" data-i18n-html="howto.a3.d"></p>
       </li>
@@ -244,7 +286,6 @@
       </li>
     </ol>
     <div class="note" data-i18n-html="howto.plan"></div>
-    <div class="note" data-i18n-html="howto.pc"></div>
     <div class="note" data-i18n-html="howto.ovNote"></div>
     <div class="note" data-i18n-html="howto.timeNote"></div>
     <div class="row gap wrap-row"><button class="btn" data-goto="csv" data-i18n="howto.goCsv"></button></div>
