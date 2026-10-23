@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계정 나침반 · X 애널리틱스 CSV 분석기 (비공식·무료)</title>
+<meta name="description" content="X 애널리틱스 CSV를 브라우저 안에서만 분석해 계정 방향을 찾아주는 무료 비공식 도구. 파일은 어디에도 업로드되지 않아요.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M16 6l4 10-4 10-4-10z' fill='%23fff'/%3E%3Cpath d='M16 16l4 0-4 10z' fill='%23c7d2fe'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="topbar">
+      <span class="credit"><span data-i18n="credit.by">제작자:</span> tuki(툭이) <span class="handle">@Ty_Tuki0609</span>
+        <a class="credit-btn" href="https://x.com/Ty_Tuki0609" target="_blank" rel="noopener" data-i18n="credit.btn" data-i18n-title="credit.title">프로필 ↗</a></span>
+      <div class="lang" data-lang-toggle role="group" aria-label="Language"></div>
+    </div>
+    <div class="top-in">
+      <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="30" height="30"><rect width="32" height="32" rx="8" fill="#4f46e5"/><circle cx="16" cy="16" r="10" fill="none" stroke="#c7d2fe" stroke-width="1.5"/><path d="M16 7l3.6 9L16 25l-3.6-9z" fill="#fff"/><path d="M16 16h3.6L16 25z" fill="#a5b4fc"/></svg></span>
+        <span data-i18n="brand.name">계정 나침반</span> <span class="tag" data-i18n="brand.tag">비공식 · 무료</span></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="csv" role="tab" aria-selected="true" data-i18n="tab.csv">📊 CSV 분석</button>
+        <button class="tab" data-tab="diag" role="tab" aria-selected="false" data-i18n="tab.diag">📝 복붙 진단</button>
+        <button class="tab" data-tab="help" role="tab" aria-selected="false" data-i18n="tab.help">❓ 사용법</button>
+      </nav>
+    </div>
+  </div>
+</header>
+<noscript><div class="wrap"><div class="alert">이 도구는 JavaScript가 필요해요. / This tool needs JavaScript.</div></div></noscript>
+
+<main class="wrap">
+  <!-- CSV 분석 -->
+  <section id="tab-csv" class="panel active">
+    <div class="hero card">
+      <h1 data-i18n="hero.h1"></h1>
+      <p data-i18n-html="hero.p"></p>
+      <div id="drop" class="drop" tabindex="0" role="button">
+        <div class="drop-ic">📂</div>
+        <div><b data-i18n="drop.title"></b> <span data-i18n="drop.title2"></span></div>
+        <div class="muted small" data-i18n="drop.sub"></div>
+        <input type="file" id="file" accept=".csv,text/csv,text/plain" hidden>
+      </div>
+      <div class="row gap wrap-row">
+        <button id="btn-sample" class="btn ghost" data-sample="sample.csv" data-i18n="btn.sample"></button>
+        <button id="btn-sample-ov" class="btn ghost" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
+        <a class="link small" href="#" data-goto="help" data-i18n="link.where"></a>
+      </div>
+      <p class="muted small unofficial" data-i18n="notice.unofficial"></p>
+      <div id="csv-error" class="alert" hidden></div>
+    </div>
+
+    <div id="overview" hidden></div>
+
+    <div id="results" hidden>
+      <div id="sample-banner" class="banner" hidden data-i18n-html="results.sampleBanner"></div>
+      <div id="col-info" class="muted small col-info"></div>
+      <div id="reply-box" class="banner info" hidden></div>
+
+      <h2 data-i18n="results.h.summary"></h2>
+      <div id="summary" class="kpis"></div>
+
+      <h2 data-i18n="results.h.suggest"></h2>
+      <div id="suggest" class="cards2"></div>
+
+      <h2 data-i18n="results.h.series"></h2>
+      <div id="series" class="cards3"></div>
+
+      <h2 data-i18n="results.h.cat"></h2>
+      <p class="muted small" data-i18n="results.catNote"></p>
+      <div id="cat-chart" class="chart"></div>
+      <div class="tbl-wrap"><table id="cat-table" class="tbl"></table></div>
+
+      <h2 data-i18n="results.h.rank"></h2>
+      <div class="row gap wrap-row">
+        <label class="small"><span data-i18n="rank.by"></span>
+          <select id="rank-metric">
+            <option value="imp" data-i18n="metric.imp"></option>
+            <option value="likes" data-i18n="metric.likes"></option>
+            <option value="bm" data-i18n="metric.bm"></option>
+            <option value="er" data-i18n="metric.er"></option>
+            <option value="nf" data-i18n="metric.nf"></option>
+            <option value="prof" data-i18n="metric.prof"></option>
+          </select>
+        </label>
+      </div>
+      <div class="cards2">
+        <div class="card"><h3 data-i18n="rank.top"></h3><ol id="top5" class="posts"></ol></div>
+        <div class="card"><h3 data-i18n="rank.bottom"></h3><ol id="bottom5" class="posts"></ol></div>
+      </div>
+
+      <h2 data-i18n="results.h.heat"></h2>
+      <div class="row gap wrap-row">
+        <label class="small"><span data-i18n="heat.by"></span>
+          <select id="heat-metric">
+            <option value="likes" data-i18n="heat.m.likes"></option>
+            <option value="imp" data-i18n="heat.m.imp"></option>
+            <option value="n" data-i18n="heat.m.n"></option>
+          </select>
+        </label>
+        <span id="time-src" class="muted small"></span>
+      </div>
+      <div id="heatmap" class="heat-wrap"></div>
+      <div id="hour-blocks" class="chart"></div>
+
+      <h2 data-i18n="results.h.hooks"></h2>
+      <p class="muted small" data-i18n="results.hookNote"></p>
+      <div class="tbl-wrap"><table id="hook-table" class="tbl"></table></div>
+
+      <p class="muted small foot-note" data-i18n="results.footnote"></p>
+    </div>
+  </section>
+
+  <!-- 복붙 진단 -->
+  <section id="tab-diag" class="panel">
+    <div class="card">
+      <h1 data-i18n="diag.h1"></h1>
+      <p data-i18n="diag.p"></p>
+      <label class="lbl" for="d-text" data-i18n="diag.textLbl"></label>
+      <textarea id="d-text" rows="8" data-i18n-placeholder="diag.placeholder"></textarea>
+      <div class="counter muted small" id="d-count"></div>
+      <div class="grid3">
+        <label class="lbl"><span data-i18n="diag.hourLbl"></span>
+          <select id="d-hour"></select>
+        </label>
+        <label class="lbl"><span data-i18n="diag.mediaLbl"></span>
+          <select id="d-media">
+            <option value="none" data-i18n="diag.media.optNone"></option>
+            <option value="image" data-i18n="diag.media.optImage"></option>
+            <option value="video" data-i18n="diag.media.optVideo"></option>
+            <option value="gif" data-i18n="diag.media.optGif"></option>
+          </select>
+        </label>
+        <label class="lbl"><span data-i18n="diag.kindLbl"></span>
+          <select id="d-kind">
+            <option value="post" data-i18n="diag.kind.post"></option>
+            <option value="quote" data-i18n="diag.kind.quote"></option>
+            <option value="thread" data-i18n="diag.kind.thread"></option>
+          </select>
+        </label>
+      </div>
+      <details class="opt">
+        <summary data-i18n="diag.optSummary"></summary>
+        <div class="grid3">
+          <label class="lbl"><span data-i18n="diag.views"></span><input id="d-views" type="number" min="0" inputmode="numeric"></label>
+          <label class="lbl"><span data-i18n="diag.likes"></span><input id="d-likes" type="number" min="0" inputmode="numeric"></label>
+          <label class="lbl"><span data-i18n="diag.bm"></span><input id="d-bm" type="number" min="0" inputmode="numeric"></label>
+        </div>
+      </details>
+      <div class="row gap"><button id="d-run" class="btn" data-i18n="diag.run"></button><button id="d-ex" class="btn ghost" data-i18n="diag.exBtn"></button></div>
+    </div>
+    <div id="d-result" hidden></div>
+  </section>
+
+  <!-- 사용법 -->
+  <section id="tab-help" class="panel">
+    <div class="card prose">
+      <h1 data-i18n="howto.title"></h1>
+      <p data-i18n-html="howto.intro"></p>
+      <div class="paths">
+        <a href="#path-a" class="path"><b data-i18n="howto.pathA.short"></b><span class="muted small" data-i18n="howto.pathA.who"></span></a>
+        <a href="#path-b" class="path"><b data-i18n="howto.pathB.short"></b><span class="muted small" data-i18n="howto.pathB.who"></span></a>
+      </div>
+    </div>
+
+    <h2 id="path-a" data-i18n="howto.pathA.h"></h2>
+    <p class="ill-note" data-i18n="howto.illNote"></p>
+    <ol class="steps">
+      <li class="step card">
+        <div class="step-n">1</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <path d="M6 16a10 10 0 0 1 10-10h288a10 10 0 0 1 10 10v16H6z" fill="#f1f5f9"/>
+          <circle cx="20" cy="19" r="3.5" fill="#fca5a5"/><circle cx="31" cy="19" r="3.5" fill="#fcd34d"/><circle cx="42" cy="19" r="3.5" fill="#86efac"/>
+          <rect x="56" y="11" width="190" height="16" rx="8" fill="#fff" stroke="#e2e8f0"/>
+          <text x="66" y="22.5" font-size="9" fill="#475569">x.com/i/account_analytics</text>
+          <text x="262" y="23" font-size="9" fill="#94a3b8" data-i18n="ill.pc">PC</text>
+          <line x1="88" y1="32" x2="88" y2="184" stroke="#e2e8f0"/>
+          <rect x="16" y="44" width="56" height="7" rx="3.5" fill="#e2e8f0"/><rect x="16" y="60" width="48" height="7" rx="3.5" fill="#e2e8f0"/><rect x="16" y="76" width="52" height="7" rx="3.5" fill="#e2e8f0"/>
+          <rect x="12" y="90" width="72" height="20" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+          <rect x="19" y="101" width="3" height="5" fill="#4f46e5"/><rect x="24" y="97" width="3" height="9" fill="#4f46e5"/><rect x="29" y="94" width="3" height="12" fill="#4f46e5"/>
+          <text x="37" y="104" font-size="9" font-weight="700" fill="#3730a3" data-i18n="ill.analytics">애널리틱스</text>
+          <rect x="16" y="120" width="44" height="7" rx="3.5" fill="#e2e8f0"/>
+          <rect x="100" y="44" width="62" height="38" rx="6" fill="#f8fafc" stroke="#e2e8f0"/><rect x="170" y="44" width="62" height="38" rx="6" fill="#f8fafc" stroke="#e2e8f0"/><rect x="240" y="44" width="62" height="38" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+          <rect x="108" y="52" width="30" height="5" rx="2.5" fill="#cbd5e1"/><rect x="108" y="64" width="40" height="9" rx="3" fill="#94a3b8"/>
+          <rect x="178" y="52" width="30" height="5" rx="2.5" fill="#cbd5e1"/><rect x="178" y="64" width="36" height="9" rx="3" fill="#94a3b8"/>
+          <rect x="248" y="52" width="30" height="5" rx="2.5" fill="#cbd5e1"/><rect x="248" y="64" width="42" height="9" rx="3" fill="#94a3b8"/>
+          <polyline points="102,160 130,140 158,148 186,118 214,128 242,104 270,112 300,96" fill="none" stroke="#a5b4fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M70 112l0 20 5-5 4 9 4-2-4-9 7 0z" fill="#111827" stroke="#fff" stroke-width="1.2"/>
+        </svg>
+        <h3 data-i18n="howto.a1.t"></h3><p class="small" data-i18n-html="howto.a1.d"></p>
+      </li>
+      <li class="step card">
+        <div class="step-n">2</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <rect x="22" y="20" width="96" height="28" rx="14" fill="#f1f5f9"/>
+          <text x="70" y="38" font-size="11" text-anchor="middle" fill="#475569" data-i18n="ill.overview">개요</text>
+          <rect x="126" y="20" width="96" height="28" rx="14" fill="#eef2ff" stroke="#4f46e5" stroke-width="2"/>
+          <text x="174" y="38" font-size="11" font-weight="700" text-anchor="middle" fill="#3730a3" data-i18n="ill.content">콘텐츠</text>
+          <rect x="230" y="20" width="70" height="28" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-dasharray="3 3"/>
+          <g fill="#e2e8f0"><rect x="22" y="64" width="276" height="1"/><rect x="22" y="94" width="276" height="1"/><rect x="22" y="124" width="276" height="1"/><rect x="22" y="154" width="276" height="1"/></g>
+          <g fill="#cbd5e1"><rect x="22" y="74" width="150" height="8" rx="4"/><rect x="22" y="104" width="120" height="8" rx="4"/><rect x="22" y="134" width="160" height="8" rx="4"/><rect x="22" y="164" width="100" height="8" rx="4"/></g>
+          <g fill="#94a3b8"><rect x="214" y="74" width="30" height="8" rx="4"/><rect x="258" y="74" width="40" height="8" rx="4"/><rect x="214" y="104" width="30" height="8" rx="4"/><rect x="258" y="104" width="40" height="8" rx="4"/><rect x="214" y="134" width="30" height="8" rx="4"/><rect x="258" y="134" width="40" height="8" rx="4"/><rect x="214" y="164" width="30" height="8" rx="4"/><rect x="258" y="164" width="40" height="8" rx="4"/></g>
+          <path d="M196 40l0 20 5-5 4 9 4-2-4-9 7 0z" fill="#111827" stroke="#fff" stroke-width="1.2"/>
+        </svg>
+        <h3 data-i18n="howto.a2.t"></h3><p class="small" data-i18n-html="howto.a2.d"></p>
+      </li>
+      <li class="step card">
+        <div class="step-n">3</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <rect x="22" y="22" width="110" height="28" rx="8" fill="#fff" stroke="#cbd5e1"/>
+          <text x="32" y="40" font-size="10.5" fill="#334155" data-i18n="ill.period">최근 28일</text><path d="M118 33l4 5 4-5" fill="none" stroke="#64748b" stroke-width="1.6"/>
+          <rect x="190" y="20" width="110" height="32" rx="16" fill="#4f46e5"/>
+          <path d="M208 28v10m-4-4l4 4 4-4M203 42h10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="222" y="40" font-size="11" font-weight="700" fill="#fff" data-i18n="ill.export">내보내기</text>
+          <rect x="186" y="16" width="118" height="40" rx="20" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4 3"/>
+          <path d="M245 60 C 245 90, 200 95, 178 112" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4"/>
+          <path d="M184 104l-7 9 11 1" fill="none" stroke="#94a3b8" stroke-width="2"/>
+          <path d="M120 100h40l14 14v52a6 6 0 0 1-6 6h-48a6 6 0 0 1-6-6v-60a6 6 0 0 1 6-6z" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
+          <path d="M160 100v14h14" fill="none" stroke="#16a34a" stroke-width="1.6"/>
+          <rect x="122" y="130" width="40" height="16" rx="4" fill="#16a34a"/><text x="142" y="142" font-size="10" font-weight="800" text-anchor="middle" fill="#fff">CSV</text>
+          <text x="144" y="186" font-size="9" text-anchor="middle" fill="#475569">.csv</text>
+          <g fill="#e2e8f0"><rect x="22" y="70" width="70" height="7" rx="3.5"/><rect x="22" y="86" width="56" height="7" rx="3.5"/><rect x="22" y="102" width="64" height="7" rx="3.5"/></g>
+        </svg>
+        <h3 data-i18n="howto.a3.t"></h3><p class="small" data-i18n-html="howto.a3.d"></p>
+      </li>
+      <li class="step card">
+        <div class="step-n">4</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <rect x="10" y="10" width="300" height="22" rx="8" fill="#f8fafc"/>
+          <rect x="18" y="15" width="12" height="12" rx="3" fill="#4f46e5"/><text x="36" y="25" font-size="9.5" font-weight="700" fill="#334155" data-i18n="brand.name">계정 나침반</text>
+          <rect x="30" y="46" width="260" height="120" rx="12" fill="#f5f5ff" stroke="#818cf8" stroke-width="2" stroke-dasharray="7 5"/>
+          <text x="160" y="136" font-size="11" font-weight="700" text-anchor="middle" fill="#3730a3" data-i18n="ill.dropHere">여기에 끌어다 놓기</text>
+          <text x="160" y="152" font-size="9" text-anchor="middle" fill="#64748b" data-i18n="ill.localOnly">브라우저 안에서만 처리 🔒</text>
+          <g transform="translate(188 62) rotate(12)"><path d="M0 0h26l10 10v36a4 4 0 0 1-4 4H0a4 4 0 0 1-4-4V4a4 4 0 0 1 4-4z" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/><rect x="0" y="22" width="28" height="11" rx="3" fill="#16a34a"/><text x="14" y="30.5" font-size="7.5" font-weight="800" text-anchor="middle" fill="#fff">CSV</text></g>
+          <path d="M150 72 C 160 80, 170 84, 182 86" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4"/>
+          <path d="M140 88v22m-8-8l8 8 8-8" fill="none" stroke="#4f46e5" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M226 104l0 20 5-5 4 9 4-2-4-9 7 0z" fill="#111827" stroke="#fff" stroke-width="1.2"/>
+        </svg>
+        <h3 data-i18n="howto.a4.t"></h3><p class="small" data-i18n-html="howto.a4.d"></p>
+      </li>
+    </ol>
+    <div class="note" data-i18n-html="howto.plan"></div>
+    <div class="note" data-i18n-html="howto.pc"></div>
+    <div class="note" data-i18n-html="howto.ovNote"></div>
+    <div class="note" data-i18n-html="howto.timeNote"></div>
+    <div class="row gap wrap-row"><button class="btn" data-goto="csv" data-i18n="howto.goCsv"></button></div>
+
+    <h2 id="path-b" data-i18n="howto.pathB.h"></h2>
+    <p class="ill-note" data-i18n="howto.illNote"></p>
+    <ol class="steps steps3">
+      <li class="step card">
+        <div class="step-n">1</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <circle cx="34" cy="36" r="14" fill="#e2e8f0"/>
+          <rect x="56" y="26" width="70" height="8" rx="4" fill="#94a3b8"/><rect x="132" y="26" width="50" height="8" rx="4" fill="#e2e8f0"/>
+          <rect x="54" y="52" width="236" height="66" rx="4" fill="#dbeafe"/>
+          <g fill="#64748b"><rect x="60" y="58" width="200" height="8" rx="4"/><rect x="60" y="74" width="220" height="8" rx="4"/><rect x="60" y="90" width="170" height="8" rx="4"/><rect x="60" y="106" width="120" height="8" rx="4"/></g>
+          <g fill="#e2e8f0"><rect x="56" y="140" width="22" height="8" rx="4"/><rect x="110" y="140" width="22" height="8" rx="4"/><rect x="164" y="140" width="22" height="8" rx="4"/><rect x="218" y="140" width="22" height="8" rx="4"/></g>
+          <rect x="196" y="118" width="104" height="30" rx="8" fill="#111827"/>
+          <text x="248" y="137" font-size="10.5" font-weight="700" text-anchor="middle" fill="#fff" data-i18n="ill.copy">복사 (Ctrl+C)</text>
+        </svg>
+        <h3 data-i18n="howto.b1.t"></h3><p class="small" data-i18n-html="howto.b1.d"></p>
+      </li>
+      <li class="step card">
+        <div class="step-n">2</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <rect x="18" y="16" width="98" height="24" rx="12" fill="#14171a"/>
+          <text x="67" y="32" font-size="10" font-weight="700" text-anchor="middle" fill="#fff" data-i18n="ill.diagTab">복붙 진단</text>
+          <rect x="18" y="50" width="284" height="88" rx="10" fill="#fff" stroke="#818cf8" stroke-width="2"/>
+          <g fill="#94a3b8"><rect x="30" y="62" width="180" height="8" rx="4"/><rect x="30" y="78" width="220" height="8" rx="4"/><rect x="30" y="94" width="160" height="8" rx="4"/><rect x="30" y="110" width="110" height="8" rx="4"/></g>
+          <rect x="144" y="108" width="2" height="14" fill="#4f46e5"/>
+          <text x="232" y="128" font-size="10" fill="#64748b">Ctrl+V</text>
+          <rect x="18" y="148" width="86" height="26" rx="13" fill="#4f46e5"/>
+          <text x="61" y="165" font-size="10.5" font-weight="700" text-anchor="middle" fill="#fff" data-i18n="ill.diagRun">진단하기</text>
+          <path d="M86 156l0 20 5-5 4 9 4-2-4-9 7 0z" fill="#111827" stroke="#fff" stroke-width="1.2"/>
+        </svg>
+        <h3 data-i18n="howto.b2.t"></h3><p class="small" data-i18n-html="howto.b2.d"></p>
+      </li>
+      <li class="step card">
+        <div class="step-n">3</div>
+        <svg class="ill" viewBox="0 0 320 190" role="img" aria-hidden="true">
+          <rect x="6" y="6" width="308" height="178" rx="10" fill="#fff" stroke="#cbd5e1"/>
+          <circle cx="66" cy="66" r="36" fill="none" stroke="#eef2f7" stroke-width="9"/>
+          <circle cx="66" cy="66" r="36" fill="none" stroke="#17a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="41" transform="rotate(-90 66 66)"/>
+          <text x="66" y="73" font-size="20" font-weight="800" text-anchor="middle" fill="#14171a">82</text>
+          <rect x="120" y="44" width="150" height="10" rx="5" fill="#86efac"/><rect x="120" y="62" width="110" height="8" rx="4" fill="#e2e8f0"/>
+          <g font-size="12"><text x="20" y="130">✅</text><text x="20" y="152">✅</text><text x="20" y="174">🟡</text></g>
+          <g fill="#cbd5e1"><rect x="44" y="121" width="150" height="8" rx="4"/><rect x="44" y="143" width="120" height="8" rx="4"/><rect x="44" y="165" width="170" height="8" rx="4"/></g>
+          <g font-size="10" fill="#64748b" text-anchor="end"><text x="300" y="129">30/30</text><text x="300" y="151">20/25</text><text x="300" y="173">9/15</text></g>
+        </svg>
+        <h3 data-i18n="howto.b3.t"></h3><p class="small" data-i18n-html="howto.b3.d"></p>
+      </li>
+    </ol>
+    <div class="row gap wrap-row"><button class="btn" data-goto="diag" data-i18n="howto.goDiag"></button></div>
+
+    <div class="card prose" style="margin-top:22px">
+      <h3 data-i18n="howto.read.h"></h3>
+      <ul><li data-i18n-html="howto.read.1"></li><li data-i18n-html="howto.read.2"></li><li data-i18n-html="howto.read.3"></li><li data-i18n-html="howto.read.4"></li></ul>
+      <h3 data-i18n="howto.cols.h"></h3>
+      <p class="small" data-i18n-html="howto.cols.p"></p>
+      <h3 data-i18n="howto.privacy.h"></h3>
+      <ul><li data-i18n-html="howto.privacy.1"></li><li data-i18n-html="howto.privacy.2"></li><li data-i18n-html="howto.privacy.3"></li></ul>
+      <p class="small"><a href="privacy.html" data-i18n="footer.privacy"></a></p>
+      <p class="muted small" data-i18n="notice.full"></p>
+    </div>
+  </section>
+</main>
+<footer class="wrap foot muted small">
+  <div><span data-i18n="footer.local"></span> · <span data-i18n="notice.unofficial"></span> · <a href="privacy.html" data-i18n="footer.privacy"></a></div>
+  <div class="credit foot-credit"><span data-i18n="credit.by">제작자:</span> tuki(툭이) <a href="https://x.com/Ty_Tuki0609" target="_blank" rel="noopener">@Ty_Tuki0609</a></div>
+</footer>
+<script src="i18n.js"></script>
+<script src="samples.js"></script>
+<script src="app.js"></script>
+<script src="diag.js"></script>
+<script src="overview.js"></script>
+</body>
+</html>
