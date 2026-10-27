@@ -80,10 +80,23 @@
       if (!A) { status.innerHTML = ''; status.hidden = true; }
       else {
         status.hidden = false;
-        const key = A.mode === 'overview'
-          ? (XA._isSample ? 'hub.loadedSampleOv' : 'hub.loadedOverview')
-          : (XA._isSample ? 'hub.loadedSample' : 'hub.loaded');
-        status.innerHTML = `<p>${esc(t(key))}</p>`;
+        const name = XA._fileLabel || 'CSV';
+        status.innerHTML = `<p>${esc(t(XA._isSample ? 'hub.fileOkSample' : 'hub.fileOk', { name: name }))}</p>`;
+      }
+    }
+    const ask = document.getElementById('hub-ask');
+    const askText = document.getElementById('hub-ask-text');
+    const strip = document.getElementById('drop');
+    if (ask && askText) {
+      if (A || !XA._askId) {
+        if (A) XA._askId = null;
+        ask.hidden = true;
+        if (strip) strip.classList.remove('need');
+      } else {
+        const asked = XA.moduleById(XA._askId);
+        ask.hidden = false;
+        askText.textContent = t('hub.ask', { name: asked ? t(asked.titleKey) : '' });
+        if (strip) strip.classList.add('need');
       }
     }
     const blocks = CATS.map((cat) => {
@@ -99,27 +112,45 @@
         const tag = `<span class="tag">${esc(t(cat.titleKey))}</span>`;
         const needs = `<span class="needs">${esc(t('hub.needsLabel'))} ${esc(t(mod.needsKey))}</span>`;
         const label = num + ' ' + t(mod.titleKey);
+        const head = `<span class="hd"><span class="num">${num}</span><span class="ic" aria-hidden="true">${mod.icon || '·'}</span><span class="tt">${esc(t(mod.titleKey))}</span></span>`;
+        const body = `${head}<span class="dd">${esc(t(mod.descKey))}</span><span class="meta">${tag}${needs}${why}</span>`;
         if (soon) {
-          return `<button type="button" class="${cls}" data-mod="${esc(mod.id)}" disabled aria-disabled="true">
-            <span class="num">${num}</span><span class="ic" aria-hidden="true">${mod.icon || '·'}</span>
-            <span class="tt">${esc(t(mod.titleKey))}</span>
-            <span class="dd">${esc(t(mod.descKey))}</span>
-            <span class="meta">${tag}${needs}${why}</span>
-          </button>`;
+          return `<button type="button" class="${cls}" data-mod="${esc(mod.id)}" disabled aria-disabled="true">${body}</button>`;
         }
-        return `<button type="button" class="${cls}" data-mod="${esc(mod.id)}" aria-label="${esc(label)}">
-          <span class="num">${num}</span><span class="ic" aria-hidden="true">${mod.icon || '·'}</span>
-          <span class="tt">${esc(t(mod.titleKey))}</span>
-          <span class="dd">${esc(t(mod.descKey))}</span>
-          <span class="meta">${tag}${needs}${why}</span>
-        </button>`;
+        return `<button type="button" class="${cls}" data-mod="${esc(mod.id)}" aria-label="${esc(label)}">${body}</button>`;
       }).join('');
       return `<section class="hub-cat" data-cat="${esc(cat.id)}"><h2>${esc(t(cat.titleKey))}</h2><div class="hub-grid">${cards}</div></section>`;
     }).join('');
     board.innerHTML = blocks;
     board.querySelectorAll('.hub-card:not(:disabled)').forEach((btn) => {
-      btn.addEventListener('click', () => XA.openCard(btn.dataset.mod));
+      btn.addEventListener('click', () => {
+        const mod = XA.moduleById(btn.dataset.mod);
+        const st = XA.cardStatus(mod, XA.last || null);
+        if (!XA.last || st.state === 'empty') {
+          XA.promptForCsv(mod);
+          return;
+        }
+        XA.openCard(btn.dataset.mod);
+      });
     });
+  };
+
+  XA.promptForCsv = function (mod) {
+    if (!mod) return;
+    XA._askId = mod.id;
+    const ask = document.getElementById('hub-ask');
+    const askText = document.getElementById('hub-ask-text');
+    const strip = document.getElementById('drop');
+    if (ask && askText) {
+      ask.hidden = false;
+      askText.textContent = t('hub.ask', { name: t(mod.titleKey) });
+    }
+    if (strip) {
+      strip.classList.add('need');
+      strip.scrollIntoView({ block: 'nearest' });
+    }
+    const pick = document.getElementById('csv-pick');
+    if (pick) pick.focus();
   };
 
   XA.syncCompassEmpty = function () {

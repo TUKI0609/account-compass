@@ -838,13 +838,17 @@
   XA.handleText = handleText;
   function readFile(f) {
     if (!f) return; if (f.size > 30 * 1024 * 1024) return showErr(XA.err('err.tooBig'));
+    XA._fileLabel = f.name || 'CSV';
     const r = new FileReader();
     r.onload = () => { const s = r.result; if ((s.match(/\uFFFD/g) || []).length > 5) { const r2 = new FileReader(); r2.onload = () => handleText(r2.result, false); r2.readAsText(f, 'euc-kr'); } else handleText(s, false); };
     r.readAsText(f, 'utf-8');
   }
-  const drop = $('#drop'), file = $('#file');
-  drop.addEventListener('click', () => file.click());
-  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } });
+  const drop = $('#drop'), file = $('#file'), pick = $('#csv-pick');
+  if (pick) pick.addEventListener('click', (e) => { e.stopPropagation(); file.click(); });
+  drop.addEventListener('keydown', (e) => {
+    if (e.target !== drop && e.target !== pick) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); }
+  });
   file.addEventListener('change', () => { readFile(file.files[0]); file.value = ''; });
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
@@ -853,6 +857,7 @@
   document.querySelectorAll('[data-sample]').forEach((btn) => btn.addEventListener('click', () => {
     const s = (XA.SAMPLES || {})[btn.dataset.sample];
     if (!s) return showErr(XA.err('err.sample'));
+    XA._fileLabel = btn.dataset.sample || 'sample.csv';
     handleText(s, true);
   }));
 

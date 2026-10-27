@@ -79,6 +79,39 @@ def open_sec(page, sid):
         page.click(f'#compass-nav button[data-sec="{sid}"]')
     page.wait_for_selector(f'#sec-{sid}:not([hidden])', state='attached')
 
+def home_fold(page, vw, vh, label):
+    page.set_viewport_size({'width': vw, 'height': vh})
+    page.evaluate('window.scrollTo(0,0)')
+    page.wait_for_timeout(80)
+    box = page.evaluate("""() => {
+      const rects = (sel) => [...document.querySelectorAll(sel)].map(el => el.getBoundingClientRect());
+      const tops = (sel) => rects(sel).map(r => Math.round(r.top));
+      const uniq = (arr) => [...new Set(arr.map(n => Math.round(n / 6) * 6))];
+      const cards = rects('#hub-board .hub-card');
+      const lead = document.querySelector('.home-lead').getBoundingClientRect();
+      const board = document.getElementById('hub-board').getBoundingClientRect();
+      const strip = document.getElementById('drop').getBoundingClientRect();
+      const last = cards.reduce((a, r) => Math.max(a, r.bottom), 0);
+      return {
+        n: cards.length,
+        leadTop: lead.top,
+        boardTop: board.top,
+        stripTop: strip.top,
+        lastBottom: last,
+        vh: window.innerHeight,
+        pairRows: uniq(tops('.hub-cat[data-cat="analyze"] .hub-card, .hub-cat[data-cat="fun"] .hub-card')).length,
+        soonRows: uniq(tops('.hub-cat[data-cat="soon"] .hub-card')).length,
+        soonN: document.querySelectorAll('.hub-cat[data-cat="soon"] .hub-card').length
+      };
+    }""")
+    check(box['n'] == 5 and box['boardTop'] >= box['leadTop'] - 1 and box['stripTop'] > box['boardTop'], f'{label} 카드가 한 줄 소개 다음, CSV 줄보다 위 {box}')
+    check(box['lastBottom'] <= box['vh'] + 1, f'{label} 카드 전부가 첫 화면 안 bottom={box["lastBottom"]:.0f} vh={vh}')
+    if vw >= 1000:
+        check(box['pairRows'] == 1 and box['soonRows'] == 1 and box['soonN'] == 3, f'{label} 데스크톱은 나침반·날씨가 한 줄, 준비 중 3장이 한 줄 {box}')
+    else:
+        check(box['pairRows'] == 1 and box['soonRows'] == 2, f'{label} 좁은 화면은 한 줄에 1~2장 {box}')
+    return box
+
 # ---------- 정적 검사: 실제 데이터 흔적 ----------
 scan = SITE_FILES + ['README.md', 'NOTES.md', 'sample.csv', 'sample_overview.csv', 'tools/gen_sample.py', 'tools/gen_sample_overview.py', 'tools/build_samples.py']
 OWNER = re.compile(r'툭이|Ty_Tuki|\btuki\b', re.I)
@@ -162,9 +195,11 @@ try:
         pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(80)
         check('X(구 트위터)와 무관한 비공식 도구입니다' in pg.inner_text('body'), '비공식 도구 안내 (ko)')
 
-        # ---------- 홈 스크린샷 ----------
+        # ---------- 홈 스크린샷 (1280x800 첫 화면) ----------
+        home_fold(pg, 1280, 800, '1280x800 ko')
         pg.screenshot(path=f'{SHOT}/v2_01_home_ko.png')
         pg.screenshot(path=f'{SHOT}/v2_15_home_ko.png')
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
 
         # ---------- 홈 카드 모음 (CSV 올리기 전) ----------
         home0 = pg.evaluate("""() => {
@@ -192,6 +227,9 @@ try:
         check(home0['cats'] == ['analyze', 'fun', 'soon'] and home0['lang'] and home0['home'] and home0['cardHidden'], f"홈 분류·언어 버튼 {home0['cats']}")
         check([c['num'] for c in home0['cards']] == ['01', '02', '03', '04', '05'], f"카드 번호 표시 {[c['num'] for c in home0['cards']]}")
         check(all(c['dis'] for c in home0['cards'] if c['id'].startswith('soon')) and not any(c['dis'] for c in home0['cards'] if c['id'] in ('compass', 'weather')), '준비 중 카드만 비활성')
+        pg.click('.hub-card[data-mod="weather"]')
+        ask = pg.inner_text('#hub-ask')
+        check(pg.evaluate("document.getElementById('card-view').hidden === true") and not pg.locator('#hub-ask').is_hidden() and 'CSV' in ask and '말투 날씨 예보' in ask, f'CSV 없으면 들어가지 않고 다음 단계를 안내 {ask[:80]}')
         pg.click('.hub-card[data-mod="soon-calendar"]', force=True)
         check(pg.evaluate("document.getElementById('card-view').hidden === true"), '준비 중 카드는 열리지 않음')
         pg.evaluate("XA.openCard('soon-hooks')")
@@ -203,32 +241,38 @@ try:
         check(pg.evaluate("!document.getElementById('home').hidden && document.getElementById('card-view').hidden"), '홈으로 돌아옴')
         pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
         en_home = pg.inner_text('#home')
-        check(pg.evaluate("document.documentElement.lang")=='en' and not HANGUL.search(en_home) and 'Tone weather' in en_home and 'Coming soon' in en_home and 'Try with the example' in en_home, f'홈 EN 즉시 반영 {HANGUL.findall(en_home)[:6]}')
+        check(pg.evaluate("document.documentElement.lang")=='en' and not HANGUL.search(en_home) and 'Tone weather' in en_home and 'Coming soon' in en_home and 'Try with the example' in en_home and 'Load a CSV' in en_home, f'홈 EN 즉시 반영 {HANGUL.findall(en_home)[:6]}')
         check(pg.locator('header [data-lang-toggle]').is_visible(), '홈에서 언어 버튼이 보임')
+        home_fold(pg, 1280, 800, '1280x800 en')
         pg.screenshot(path=f'{SHOT}/v2_16_home_en.png')
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
         pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
         ja_home = pg.inner_text('#home')
-        check(pg.evaluate("document.documentElement.lang")=='ja' and not HANGUL.search(ja_home) and KANA.search(ja_home) and '口調の天気予報' in ja_home and '準備中' in ja_home and '例で試す' in ja_home, f'홈 JA 즉시 반영 {HANGUL.findall(ja_home)[:6]}')
+        check(pg.evaluate("document.documentElement.lang")=='ja' and not HANGUL.search(ja_home) and KANA.search(ja_home) and '口調の天気予報' in ja_home and '準備中' in ja_home and '例で試す' in ja_home and 'CSVを読み込む' in ja_home, f'홈 JA 즉시 반영 {HANGUL.findall(ja_home)[:6]}')
+        home_fold(pg, 1280, 800, '1280x800 ja')
         pg.screenshot(path=f'{SHOT}/v2_17_home_ja.png')
+        pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
         pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
         check(pg.evaluate("XA.last==null && document.documentElement.lang=='ko'"), '언어를 바꿔도 CSV는 그대로 없음, 한국어로 복귀')
 
         # ---------- 샘플 (내장 samples.js) ----------
         pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])', state='attached'); pg.wait_for_timeout(800)
         check(pg.evaluate("document.getElementById('home') && !document.getElementById('home').hidden"), '예시를 넣어도 홈에 머무름')
-        check('EXAMPLE' in pg.inner_text('#home-status'), '홈에 예시라고 표시')
+        st = pg.inner_text('#home-status')
+        check('EXAMPLE' in st and 'sample.csv' in st and '✓' in st, f'홈에 파일 이름과 예시 표시 {st}')
+        check('이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="compass"]') and '이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="weather"]'), '올린 뒤 카드가 열 수 있다고 표시')
         kept_n = pg.evaluate('XA.last.posts.length')
         pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
         home_en = pg.inner_text('#home')
         check(pg.evaluate('XA.last.posts.length') == kept_n and pg.evaluate("localStorage.getItem('xa-lang')")=='en', '홈에서 언어를 바꿔도 CSV를 다시 읽지 않음')
-        check('Tone weather' in home_en and 'Coming soon' in home_en and 'Try with the example' in home_en and 'Drag & drop your CSV here' in home_en and 'Analysis & direction' in home_en and 'Not available yet' in home_en and not HANGUL.search(home_en), f'올린 뒤 홈 EN 즉시 반영 {HANGUL.findall(home_en)[:6]}')
+        check('Tone weather' in home_en and 'Coming soon' in home_en and 'Try with the example' in home_en and 'Load a CSV' in home_en and 'Analysis & direction' in home_en and 'Not available yet' in home_en and 'CSV loaded' in home_en and 'sample.csv' in home_en and not HANGUL.search(home_en), f'올린 뒤 홈 EN 즉시 반영 {HANGUL.findall(home_en)[:6]}')
         open_card(pg, 'weather')
         check('← Home' in pg.inner_text('#back-home') and pg.evaluate("document.documentElement.lang")=='en' and 'For fun' in pg.inner_text('#card-dynamic') and pg.evaluate('XA.last.posts.length')==kept_n, '홈에서 고른 언어가 카드·뒤로가기에도 유지')
         pg.click('#back-home')
         check(pg.evaluate("document.documentElement.lang")=='en' and 'Tone weather' in pg.inner_text('#home') and pg.evaluate('XA.last.posts.length')==kept_n, '카드에서 홈으로 돌아와도 언어·CSV 유지')
         pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
         home_ja = pg.inner_text('#home')
-        check(pg.evaluate('XA.last.posts.length')==kept_n and '口調の天気予報' in home_ja and '準備中' in home_ja and '例で試す' in home_ja and 'CSVファイルをここにドロップするか' in home_ja and not HANGUL.search(home_ja), f'올린 뒤 홈 JA 즉시 반영 {HANGUL.findall(home_ja)[:6]}')
+        check(pg.evaluate('XA.last.posts.length')==kept_n and '口調の天気予報' in home_ja and '準備中' in home_ja and '例で試す' in home_ja and 'CSVを読み込む' in home_ja and 'sample.csv' in home_ja and not HANGUL.search(home_ja), f'올린 뒤 홈 JA 즉시 반영 {HANGUL.findall(home_ja)[:6]}')
         open_card(pg, 'compass')
         check('← ホームへ' in pg.inner_text('#back-home') and pg.evaluate("document.documentElement.lang")=='ja' and pg.evaluate('XA.last.posts.length')==kept_n, '홈에서 고른 일본어가 나침반 카드에 유지')
         pg.click('#back-home')
@@ -724,9 +768,11 @@ try:
         serr = []; s.on('pageerror', lambda e: serr.append(str(e)))
         s.goto(URL); s.wait_for_timeout(300)
         s.click('[data-lang-toggle] button[data-lang=ko]'); s.wait_for_timeout(150)
+        home_fold(s, 360, 640, '360x640 ko')
         ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360 and not serr, f'360 홈 가로 넘침 없음 ({ow}) {serr}')
         check(s.locator('header [data-lang-toggle]').is_visible() and s.locator('.hub-card').count()==5, '360 홈에 언어 버튼과 카드 5장')
         s.screenshot(path=f'{SHOT}/v2_22_home_360.png')
+        s.set_viewport_size({'width': 360, 'height': 740}); s.wait_for_timeout(40)
         s.click('#btn-sample'); s.wait_for_selector('#results:not([hidden])', state='attached'); s.wait_for_timeout(400)
         open_card(s, 'weather'); s.wait_for_timeout(200)
         ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 날씨 가로 넘침 없음 ({ow})')

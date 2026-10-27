@@ -51,29 +51,25 @@
   <!-- 홈: CSV 한 번, 카드 여러 장 -->
   <section id="tab-csv" class="panel active">
     <div id="home">
-    <div class="hero card">
-      <h1 data-i18n="hero.h1"></h1>
-      <p data-i18n-html="hero.p"></p>
-      <div id="drop" class="drop" tabindex="0" role="button">
-        <div class="drop-ic">📂</div>
-        <div><b data-i18n="drop.title"></b> <span data-i18n="drop.title2"></span></div>
-        <div class="muted small" data-i18n="drop.sub"></div>
+      <div class="hero home-lead"><h1 data-i18n="hero.h1"></h1></div>
+      <div id="hub-board"></div>
+      <div id="drop" class="csv-strip" tabindex="0">
+        <div class="csv-actions">
+          <button type="button" id="csv-pick" class="btn" data-i18n="drop.title">CSV 올리기</button>
+          <button id="btn-sample" class="btn ghost" data-sample="sample.csv" data-i18n="btn.sample"></button>
+          <button id="btn-sample-ov" class="btn ghost" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
+        </div>
+        <p class="csv-note" data-i18n="drop.sub"></p>
+        <div class="beginner">
+          <a class="beginner-cta" href="#" data-goto="help" data-i18n="home.howto">처음이에요? 사용법 보기</a>
+          <a class="beginner-cta alt" href="#" data-goto="diag" data-i18n="home.diag">무료 · 복붙 진단 (Premium 없이)</a>
+          <span class="beginner-note muted small" data-i18n-html="home.note"></span>
+        </div>
+        <div id="hub-ask" class="hub-ask" hidden role="status"><p id="hub-ask-text"></p></div>
+        <div id="home-status" aria-live="polite" hidden></div>
+        <div id="csv-error" class="alert" hidden></div>
         <input type="file" id="file" accept=".csv,text/csv,text/plain" hidden>
       </div>
-      <div class="beginner">
-        <a class="beginner-cta" href="#" data-goto="help" data-i18n="home.howto">처음이에요? 사용법 보기</a>
-        <a class="beginner-cta alt" href="#" data-goto="diag" data-i18n="home.diag">무료 · 복붙 진단 (Premium 없이)</a>
-      </div>
-      <p class="muted small beginner-note" data-i18n-html="home.note"></p>
-      <div class="row gap wrap-row">
-        <button id="btn-sample" class="btn ghost" data-sample="sample.csv" data-i18n="btn.sample"></button>
-        <button id="btn-sample-ov" class="btn ghost" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
-      </div>
-      <p class="muted small unofficial" data-i18n="notice.unofficial"></p>
-      <div id="csv-error" class="alert" hidden></div>
-    </div>
-    <div id="home-status" class="banner info" aria-live="polite" hidden></div>
-    <div id="hub-board"></div>
     </div>
 
     <div id="card-view" hidden>
