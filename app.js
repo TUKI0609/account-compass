@@ -133,8 +133,11 @@
   const kstStr = (ms, withTime) => { const d = kst(ms); const s = `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`; return withTime ? `${s} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` : s; };
 
   /* ---------- 답글 감지: 본문이 @아이디로 시작하면 다른 사람 글에 단 답글 ---------- */
-  const isReplyText = (s) => /^\s*[@＠][A-Za-z0-9_]{1,15}\b/.test(String(s || ''));
+  const REPLY_AT = /^\s*[@＠]([A-Za-z0-9_]{1,15})\b/;
+  const isReplyText = (s) => REPLY_AT.test(String(s || ''));
+  function replyHandle(s) { const m = String(s || '').match(REPLY_AT); return m ? m[1] : ''; }
   XA.isReplyText = isReplyText;
+  XA.replyHandle = replyHandle;
 
   /* ---------- 카테고리 규칙 (한국어 + 영어 + 일본어 키워드, 점수가 가장 높은 쪽). 이름은 i18n 'cat.<id>' ---------- */
   const CATS = ['guide', 'exp', 'video', 'daily', 'news', 'quote', 'etc'];
@@ -262,6 +265,7 @@
       if (map.eng == null) p.eng = p.likes + p.rep + p.rt + p.bm + p.shares + p.prof + p.det + p.url;
       p.er = p.imp ? p.eng / p.imp : 0; p.br = p.imp ? p.bm / p.imp : 0;
       p.isReply = isReplyText(p.text);
+      p.replyTo = p.isReply ? replyHandle(p.text) : '';
       p.cat = p.isReply ? 'reply' : categorize(p.text);
       if (ms != null && hasTime) { const d = kst(ms); p.hour = d.getUTCHours(); p.dow = d.getUTCDay(); } else if (ms != null) { p.dow = kst(ms).getUTCDay(); }
       return p;
@@ -289,6 +293,322 @@
       (unmapped && unmapped.length ? ` · <b>${t('colinfo.unknown')} ${esc(unmapped.join(', '))}</b>` : '');
   }
   XA.colInfo = colInfo;
+
+  function hookRows(posts) {
+    return HOOKS.map(([id, fn]) => {
+      const w = posts.filter((p) => fn(p.text)), wo = posts.filter((p) => !fn(p.text));
+      const a = agg(w), b = agg(wo);
+      return { id, a, b, lift: b.br ? a.br / b.br : a.br ? Infinity : 0 };
+    });
+  }
+  XA.hookRows = hookRows;
+
+  /* ---------- 맞는 사람 찾기: 검색 링크만. 요청은 보내지 않음 ---------- */
+  const HOOK_Q = {
+    free: { ko: '무료', en: 'free', ja: '無料' },
+    summary: { ko: '정리', en: 'roundup', ja: 'まとめ' },
+    prompt: { ko: '프롬프트', en: 'prompt', ja: 'プロンプト' },
+    beforePay: { ko: '결제 전', en: 'before you pay', ja: '課金する前' },
+    tried: { ko: '해봤', en: 'I tried', ja: 'やってみた' },
+    money: { ko: '수익', en: 'revenue', ja: '収益' },
+  };
+  function detectPostLang(posts) {
+    let ko = 0, ja = 0, en = 0;
+    (posts || []).forEach((p) => {
+      const s = String(p.text || '');
+      ko += (s.match(/[가-힣]/g) || []).length;
+      ja += (s.match(/[\u3040-\u30ff]/g) || []).length;
+      en += (s.match(/[A-Za-z]/g) || []).length;
+    });
+    const ranked = [['ko', ko], ['ja', ja], ['en', en]].sort((a, b) => b[1] - a[1]);
+    return ranked[0][1] > 0 ? ranked[0][0] : '';
+  }
+  function favesFloor(posts) {
+    const med = median((posts || []).map((p) => p.likes || 0));
+    const n = Math.round(med);
+    if (n < 5) return 5;
+    if (n > 100) return 100;
+    return n;
+  }
+  function cleanTerm(s) {
+    const t = String(s || '').replace(/https?:\/\/\S+/g, ' ').replace(/[@＠#]/g, ' ').replace(/["'\\{}]/g, '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length < 2 || t.length > 40) return '';
+    if (/filter:|min_faves:|min_retweets:|lang:|since:|until:|url:|\bfrom:|\bto:/i.test(t)) return '';
+    if (/^[\d\s.]+$/.test(t)) return '';
+    return t;
+  }
+  function quoteTerm(s) {
+    const t = cleanTerm(s);
+    if (!t) return '';
+    return /[\s:]/.test(t) ? '"' + t + '"' : t;
+  }
+  function xSearchUrl(q, tab) {
+    try {
+      const u = new URL('https://x.com/search');
+      u.searchParams.set('q', q);
+      u.searchParams.set('src', 'typed_query');
+      if (tab === 'user' || tab === 'live') u.searchParams.set('f', tab);
+      const s = u.toString();
+      return s.startsWith('https://x.com/search?') ? s : '';
+    } catch (e) { return ''; }
+  }
+  function fittingQueries(originals, hookRowsIn, byCat, hasBm) {
+    const posts = (originals || []).filter((p) => !p.isReply && String(p.text || '').trim());
+    if (!posts.length) return { queries: [], lang: '', minFaves: 0, medLikes: 0, cat: '', hookId: '' };
+    const lang = detectPostLang(posts);
+    const medLikes = median(posts.map((p) => p.likes || 0));
+    const fav = favesFloor(posts);
+    const ok = (byCat || []).filter((x) => x.n >= 3 && x.c !== 'etc' && x.c !== 'reply');
+    const best = ok.length ? (hasBm ? [...ok].sort((a, b) => b.br - a.br || b.n - a.n)[0] : [...ok].sort((a, b) => b.er - a.er || b.n - a.n)[0]) : null;
+    let pool = best ? posts.filter((p) => p.cat === best.c) : posts;
+    if (pool.length < 3) pool = posts;
+    const metric = hasBm && pool.some((p) => p.bm > 0) ? 'bm' : 'likes';
+    const top = [...pool].sort((a, b) => (b[metric] || 0) - (a[metric] || 0) || b.imp - a.imp).slice(0, Math.max(4, Math.ceil(pool.length * 0.4)));
+    let tp = topics(top).map(cleanTerm).filter(Boolean);
+    if (tp.length < 2) topics(posts).map(cleanTerm).filter(Boolean).forEach((w) => { if (!tp.some((o) => o.toLowerCase() === w.toLowerCase())) tp.push(w); });
+    tp = tp.filter((w, i) => !tp.some((o, j) => j < i && (o.toLowerCase().includes(w.toLowerCase()) || w.toLowerCase().includes(o.toLowerCase())))).slice(0, 3);
+    // 번호 목록·CTA처럼 검색어로 쓰기 어려운 훅은 건너뛰고, 단어가 있는 훅 중 배율이 가장 큰 것을 쓴다.
+    const bestHook = (hookRowsIn || []).filter((r) => HOOK_Q[r.id] && r.a.n >= 3 && r.b.n >= 3 && isFinite(r.lift) && r.lift >= 1.2).sort((a, b) => b.lift - a.lift)[0];
+    const queries = []; const seen = new Set();
+    const add = (parts, why) => {
+      const bits = parts.map(quoteTerm).filter(Boolean);
+      if (!bits.length) return;
+      let q = bits.join(' ');
+      if (lang) q += ' lang:' + lang;
+      q += ' min_faves:' + fav + ' -filter:replies';
+      if (seen.has(q)) return;
+      seen.add(q);
+      const term = parts.map(cleanTerm).filter(Boolean).join(' ');
+      queries.push({ term, why, q, postsUrl: xSearchUrl(q, 'live'), peopleUrl: xSearchUrl(q, 'user') });
+    };
+    tp.forEach((w) => add([w], 'topic'));
+    if (bestHook && HOOK_Q[bestHook.id]) {
+      const hw = HOOK_Q[bestHook.id][lang] || HOOK_Q[bestHook.id].en;
+      if (tp[0]) add([tp[0], hw], 'hook'); else add([hw], 'hook');
+    }
+    return { queries: queries.slice(0, 4), lang, minFaves: fav, medLikes, cat: best ? best.c : '', hookId: bestHook ? bestHook.id : '' };
+  }
+  function linkBtn(href, label) {
+    if (!href || !/^https:\/\/x\.com\/search\?/.test(href)) return '';
+    return `<a class="btn ghost" href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`;
+  }
+  function profileLink(handle) {
+    const h = String(handle || '').replace(/[^A-Za-z0-9_]/g, '');
+    if (!h) return '';
+    return `<a href="https://x.com/${h}" target="_blank" rel="noopener">@${esc(h)}</a>`;
+  }
+  function fitHTML(A, originals, byCat) {
+    if (!A.hasText) return `<p class="muted small">${t('fit.noText')}</p>`;
+    const F = fittingQueries(originals, XA._hooks, byCat, A.hasBm);
+    if (!F.queries.length) return `<p class="muted small">${t('fit.none')}</p>`;
+    const langName = F.lang ? t('fit.lang.' + F.lang) : t('fit.lang.none');
+    let html = `<p class="muted small">${t('fit.note', { lang: esc(langName), fav: String(F.minFaves), med: f1(F.medLikes) })}</p>`;
+    if (F.cat) html += `<p class="muted small">${t('fit.catNote', { c: esc(catName(F.cat)) })}</p>`;
+    html += '<div class="fit-list">' + F.queries.map((q) => {
+      const why = q.why === 'hook' ? t('fit.why.hook', { h: esc(t('hook.' + (F.hookId || 'free'))) }) : (F.cat ? t('fit.why.topic', { c: esc(catName(F.cat)) }) : t('fit.why.topicAll'));
+      return `<div class="fit-item"><div class="t from-data">${esc(q.term)}</div><p class="why">${why}</p><div class="fit-q from-data">${esc(q.q)}</div><div class="fit-links">${linkBtn(q.postsUrl, t('fit.posts'))}${linkBtn(q.peopleUrl, t('fit.people'))}</div></div>`;
+    }).join('') + '</div>';
+    return html;
+  }
+
+  /* ---------- 답글 대상 순위 (상관. 원인으로 읽지 않음) ---------- */
+  function replyTargets(list) {
+    const groups = new Map();
+    (list || []).forEach((p) => {
+      const raw = p.replyTo || replyHandle(p.text);
+      if (!raw) return;
+      const key = raw.toLowerCase();
+      let g = groups.get(key);
+      if (!g) { g = { handle: raw, key, n: 0, nf: 0, prof: 0, imp: 0, likes: 0 }; groups.set(key, g); }
+      g.n += 1; g.nf += p.nf || 0; g.prof += p.prof || 0; g.imp += p.imp || 0; g.likes += p.likes || 0;
+    });
+    const rows = [...groups.values()].sort((a, b) => b.nf - a.nf || b.prof - a.prof || b.imp - a.imp || b.n - a.n || a.key.localeCompare(b.key));
+    const n = sum(rows.map((r) => r.n));
+    const avgNf = n ? sum(rows.map((r) => r.nf)) / n : 0;
+    const avgProf = n ? sum(rows.map((r) => r.prof)) / n : 0;
+    const keep = rows.filter((r) => r.n >= 2 && ((r.nf > 0 && (avgNf <= 0 || r.nf / r.n >= avgNf)) || (avgProf > 0 && r.prof > 0 && r.prof / r.n >= avgProf * 1.25)));
+    const drop = rows.filter((r) => r.n >= 3 && r.nf === 0 && r.prof === 0);
+    const low = rows.filter((r) => r.n >= 3 && r.nf === 0 && r.prof > 0 && (avgProf <= 0 || r.prof / r.n < avgProf));
+    const watch = rows.filter((r) => r.n < 2);
+    return { rows, keep, drop, low, watch, avgNf, avgProf, n, handles: rows.length };
+  }
+  function rtargetHTML(replies) {
+    const R = replyTargets(replies);
+    if (!R.rows.length) return `<p class="muted small">${t('rtarget.empty')}</p>`;
+    const li = (r, key) => `<li>${profileLink(r.handle)} <span class="muted">· ${esc(t(key, { n: fmt(r.n), nf: fmt(r.nf), prof: fmt(r.prof), imp: fmt(r.imp) }))}</span></li>`;
+    const card = (cls, title, body, rows, itemKey, emptyKey) => `<div class="card ${cls}"><div class="t">${esc(title)}</div><p>${body}</p>${rows.length ? `<ul class="rt-list">${rows.map((r) => li(r, itemKey)).join('')}</ul>` : `<p class="muted small">${t(emptyKey)}</p>`}</div>`;
+    let html = `<p class="note">${t('rtarget.note')}</p><p class="muted small">${t('rtarget.avg', { nf: f1(R.avgNf), prof: f1(R.avgProf), h: String(R.handles), n: fmt(R.n) })}</p><div class="cards2">`;
+    html += card('keep', t('rtarget.keep.h'), t('rtarget.keep.p'), R.keep, 'rtarget.keep.item', 'rtarget.noneKeep');
+    html += card('drop', t('rtarget.drop.h'), t('rtarget.drop.p'), R.drop, 'rtarget.drop.item', 'rtarget.noneDrop');
+    html += '</div>';
+    if (R.low.length) html += `<p class="muted small">${t('rtarget.low.h')}</p><ul class="rt-list">${R.low.map((r) => li(r, 'rtarget.low.item')).join('')}</ul>`;
+    if (R.watch.length) html += `<p class="muted small"><b>${esc(t('rtarget.watch.h'))}</b> ${t('rtarget.watch.p')}</p><ul class="rt-list">${R.watch.map((r) => li(r, 'rtarget.watch.item')).join('')}</ul>`;
+    const th = ['handle', 'replies', 'rtNf', 'rtProf', 'rtImp', 'rtEach'].map((k) => `<th>${esc(t('th.' + k))}</th>`).join('');
+    html += `<div class="tbl-wrap"><table class="tbl" id="rtarget-table"><thead><tr>${th}</tr></thead><tbody>` + R.rows.map((r) => {
+      const each = r.n ? r.nf / r.n : 0;
+      const mark = r.nf > 0 && r.n >= 2 ? 'hi' : (r.n >= 3 && r.nf === 0 && r.prof === 0 ? 'lo' : '');
+      const small = r.n < 3 ? ` <span class="chip">${esc(t('rtarget.small'))}</span>` : '';
+      return `<tr class="${r.n < 3 ? 'thin' : ''}"><td>${profileLink(r.handle)}${small}</td><td>${fmt(r.n)}</td><td class="${mark}">${fmt(r.nf)}</td><td>${fmt(r.prof)}</td><td>${fmt(r.imp)}</td><td>${f1(each)}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+    return html;
+  }
+
+  /* ---------- 이번 주 할 일 3개: 올린 파일의 평균과만 비교 ---------- */
+  function weeklyActions(A) {
+    const originals = A.posts.filter((p) => !p.isReply);
+    const base = originals.length ? originals : A.posts;
+    const all = agg(base);
+    const byCat = CATS.map((c) => ({ c, ...agg(base.filter((p) => p.cat === c)) })).filter((x) => x.n);
+    const timed = base.filter((p) => p.hour != null);
+    const replies = A.posts.filter((p) => p.isReply);
+    const hooks = A.hasText ? hookRows(originals.length ? originals : base) : [];
+    const out = [];
+    const ok = byCat.filter((x) => x.n >= 3 && x.c !== 'etc' && x.c !== 'reply');
+    let best = null;
+    if (A.hasText && ok.length) {
+      if (A.hasBm) best = [...ok].sort((a, b) => b.br - a.br || b.nfr - a.nfr)[0];
+      else if (A.map.nf != null) best = [...ok].sort((a, b) => b.nfr - a.nfr || b.er - a.er)[0];
+      else best = [...ok].sort((a, b) => b.er - a.er)[0];
+    }
+    if (best) {
+      const share = best.n / (all.n || 1);
+      const useBr = !!(A.hasBm && all.br > 0);
+      const mult = useBr ? best.br / all.br : (all.er > 0 ? best.er / all.er : 0);
+      const nMore = share < 0.2 ? 2 : 1;
+      const C = esc(catName(best.c));
+      if (share >= 0.45 && mult >= 1.1) out.push({ id: 'keepcat', t: t('act.keepcat.t', { c: C }), p: t('act.keepcat.p', { c: C, share: pct(share, 0), x: mult.toFixed(1), br: pct(useBr ? best.br : best.er), all: pct(useBr ? all.br : all.er) }) });
+      else if (useBr) out.push({ id: 'more', t: t('act.more.t', { c: C, n: nMore }), p: t('act.more.p', { c: C, br: pct(best.br), all: pct(all.br), x: (mult || 0).toFixed(1), share: pct(share, 0), n: nMore }) });
+      else out.push({ id: 'more', t: t('act.more.t', { c: C, n: nMore }), p: t('act.more.pNoBm', { c: C, er: pct(best.er), all: pct(all.er), x: (mult || 0).toFixed(1), share: pct(share, 0), n: nMore }) });
+    }
+    const RT = replyTargets(replies);
+    const top = RT.rows.find((r) => r.n >= 2 && r.nf > 0 && (RT.avgNf <= 0 || r.nf / r.n >= RT.avgNf));
+    if (top) {
+      const h = profileLink(top.handle);
+      out.push({ id: 'reply', t: t('act.reply.t', { h }), p: t('act.reply.p', { h, n: fmt(top.n), nf: fmt(top.nf), prof: fmt(top.prof), each: f1(top.nf / top.n), avg: f1(RT.avgNf) }) });
+    } else if (replies.length >= 3 && A.map.nf != null) {
+      const rAgg = agg(replies), oAgg = agg(originals.length ? originals : base);
+      const watch = RT.watch.find((r) => r.nf > 0);
+      if (rAgg.nf === 0 && oAgg.nf > 0) {
+        const c = best ? esc(catName(best.c)) : esc(t('series.topPosts'));
+        out.push({ id: 'replyNone', t: t('act.replyNone.t'), p: t('act.replyNone.p', { rn: fmt(replies.length), rnf: fmt(rAgg.nf), on: fmt(oAgg.n), onf: fmt(oAgg.nf), c }) });
+      } else if (watch) {
+        const h = profileLink(watch.handle);
+        out.push({ id: 'replyWatch', t: t('act.replyWatch.t', { h }), p: t('act.replyWatch.p', { h, nf: fmt(watch.nf), prof: fmt(watch.prof) }) });
+      }
+    }
+    if (timed.length >= 8) {
+      const bL = hourBlocks(timed).filter((b) => b.n >= 3).sort((a, b) => b.avgLikes - a.avgLikes || b.n - a.n)[0];
+      if (bL) {
+        const x = all.avgLikes > 0 ? bL.avgLikes / all.avgLikes : 0;
+        out.push({ id: 'time', t: t('act.time.t', { b: esc(bL.label) }), p: t('act.time.p', { b: esc(bL.label), v: f1(bL.avgLikes), all: f1(all.avgLikes), x: x.toFixed(1) }) });
+      }
+    }
+    const weak = ok.filter((x) => (!best || x.c !== best.c) && x.n / (all.n || 1) >= 0.1 && (A.hasBm ? all.br > 0 && x.br < all.br * 0.5 : all.er > 0 && x.er < all.er * 0.5)).sort((a, b) => (A.hasBm ? a.br - b.br : a.er - b.er))[0];
+    if (A.hasText && weak) {
+      const C = esc(catName(weak.c));
+      const share = weak.n / (all.n || 1);
+      const mult = A.hasBm ? weak.br / (all.br || 1e-9) : weak.er / (all.er || 1e-9);
+      out.push({ id: 'less', t: t('act.less.t', { c: C }), p: t(A.hasBm ? 'act.less.p' : 'act.less.pNoBm', { c: C, share: pct(share, 0), br: pct(A.hasBm ? weak.br : weak.er), all: pct(A.hasBm ? all.br : all.er), x: mult.toFixed(1) }) });
+    }
+    const bestHook = hooks.filter((r) => r.a.n >= 3 && r.b.n >= 3 && isFinite(r.lift) && r.lift >= 1.3).sort((a, b) => b.lift - a.lift)[0];
+    if (bestHook) out.push({ id: 'hook', t: t('act.hook.t', { h: esc(t('hook.' + bestHook.id)) }), p: t('act.hook.p', { h: esc(t('hook.' + bestHook.id)), a: pct(bestHook.a.br), b: pct(bestHook.b.br), x: bestHook.lift.toFixed(1), n: bestHook.a.n }) });
+    if (out.length < 3) out.push({ id: 'moreData', t: t('act.moreData.t'), p: t('act.moreData.p') });
+    const picked = []; const seen = new Set();
+    out.forEach((a) => { if (picked.length < 3 && !seen.has(a.id)) { seen.add(a.id); picked.push(a); } });
+    while (picked.length < 3) picked.push({ id: 'moreData', t: t('act.moreData.t'), p: t('act.moreData.p') });
+    return picked.slice(0, 3);
+  }
+
+  /* ---------- 글 vs 그 밖 새 팔로우 (콘텐츠 합 ÷ 겹친 기간의 개요 합) ---------- */
+  function kstDayKey(ms) { const d = kst(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function dayKeyStr(k) {
+    if (k == null || !isFinite(k)) return '-';
+    const d = new Date(k);
+    return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+  function followShare(posts, overview) {
+    if (!overview || !overview.days) return { status: 'missing' };
+    if (overview.map && overview.map.nf == null) return { status: 'noNf' };
+    const days = overview.days;
+    const postAll = sum((posts || []).map((p) => p.nf || 0));
+    const ovAll = sum(days.map((d) => d.nf || 0));
+    const postDays = (posts || []).filter((p) => p.ms != null).map((p) => ({ key: kstDayKey(p.ms), nf: p.nf || 0 }));
+    if (!postDays.length || !days.length) return { status: 'noDate', postAll, ovAll };
+    const p0 = Math.min(...postDays.map((p) => p.key)), p1 = Math.max(...postDays.map((p) => p.key));
+    const o0 = Math.min(...days.map((d) => d.key)), o1 = Math.max(...days.map((d) => d.key));
+    const a = Math.max(p0, o0), b = Math.min(p1, o1);
+    if (b < a) return { status: 'noOverlap', postAll, ovAll, postStart: p0, postEnd: p1, ovStart: o0, ovEnd: o1 };
+    const postNf = sum(postDays.filter((p) => p.key >= a && p.key <= b).map((p) => p.nf));
+    const ovDays = days.filter((d) => d.key >= a && d.key <= b);
+    const ovNf = sum(ovDays.map((d) => d.nf || 0));
+    const span = Math.round((b - a) / 864e5) + 1;
+    const base = { postNf, ovNf, start: a, end: b, days: ovDays.length, span, postAll, ovAll };
+    if (ovNf <= 0) return Object.assign({ status: 'zeroOv' }, base);
+    if (postNf > ovNf) return Object.assign({ status: 'over' }, base);
+    return Object.assign({ status: 'ok', share: postNf / ovNf, elsewhere: (ovNf - postNf) / ovNf }, base);
+  }
+  function cachedSample(name, key) {
+    if (XA[key]) return XA[key];
+    const s = (XA.SAMPLES || {})[name];
+    if (!s) return null;
+    try { XA[key] = analyze(parseCSV(s)); } catch (e) { XA[key] = null; }
+    return XA[key];
+  }
+  function pairForContent(isSample) {
+    const userOv = XA.lastOverview;
+    if (userOv && userOv.mode === 'overview') {
+      if (!!XA.lastOverviewSample === !!isSample) return { ov: userOv, kind: isSample ? 'sample' : 'user' };
+      return { ov: null, kind: 'mismatch' };
+    }
+    if (isSample) { const ov = cachedSample('sample_overview.csv', '_sampleOverview'); if (ov) return { ov, kind: 'sample' }; }
+    return { ov: null, kind: 'missing' };
+  }
+  function pairForOverview(isSample) {
+    const userC = XA.lastContent;
+    if (userC && userC.mode !== 'overview') {
+      if (!!XA.lastContentSample === !!isSample) return { content: userC, kind: isSample ? 'sample' : 'user' };
+      return { content: null, kind: 'mismatch' };
+    }
+    if (isSample) { const c = cachedSample('sample.csv', '_sampleContent'); if (c) return { content: c, kind: 'sample' }; }
+    return { content: null, kind: 'missing' };
+  }
+  function followShareModel(side, isSample) {
+    const pair = side === 'overview' ? pairForOverview(isSample) : pairForContent(isSample);
+    if (pair.kind === 'missing' || pair.kind === 'mismatch') return { kind: pair.kind };
+    const content = side === 'overview' ? pair.content : XA.lastContent;
+    const ov = side === 'overview' ? XA.lastOverview : pair.ov;
+    if (!content || !ov) return { kind: 'missing' };
+    if (content.map.nf == null || ov.map.nf == null) return { kind: 'noNf' };
+    const stat = followShare(content.posts, ov);
+    stat.kind = stat.status;
+    stat.pairKind = pair.kind;
+    return stat;
+  }
+  function followShareInner(side, isSample) {
+    const m = followShareModel(side, isSample);
+    if (m.kind === 'missing') return `<p class="muted small">${t('fsrc.missing')}</p>`;
+    if (m.kind === 'mismatch') return `<p class="note">${t('fsrc.mismatch')}</p>`;
+    if (m.kind === 'noNf' || m.status === 'noNf') return `<p class="muted small">${t('fsrc.noNf')}</p>`;
+    const src = m.pairKind === 'sample' ? t('fsrc.sample') : t('fsrc.both');
+    if (m.status === 'noDate') return `<p class="muted small">${src}</p><p class="muted small">${t('fsrc.noDate')}</p>`;
+    if (m.status === 'noOverlap') return `<p class="muted small">${src}</p><p class="muted small">${t('fsrc.noOverlap', { a: esc(dayKeyStr(m.postStart)), b: esc(dayKeyStr(m.postEnd)), c: esc(dayKeyStr(m.ovStart)), d: esc(dayKeyStr(m.ovEnd)) })}</p>`;
+    if (m.status === 'zeroOv') return `<p class="muted small">${src} ${t('fsrc.period', { a: esc(dayKeyStr(m.start)), b: esc(dayKeyStr(m.end)), d: fmt(m.span) })}</p><p class="muted small">${t('fsrc.zeroOv', { p: fmt(m.postNf) })}</p>`;
+    const grid = (share, elsewhere) => `<div class="fsrc-grid"><div class="fsrc"><div class="k">${esc(t('fsrc.share'))}</div><div class="v">${share}</div><div class="s">${esc(t('fsrc.shareSub', { p: fmt(m.postNf), o: fmt(m.ovNf) }))}</div></div><div class="fsrc"><div class="k">${esc(t('fsrc.else'))}</div><div class="v">${elsewhere}</div><div class="s">${esc(t('fsrc.elseSub'))}</div></div><div class="fsrc"><div class="k">${esc(t('fsrc.periodK'))}</div><div class="v">${esc(t('unit.days', { n: fmt(m.span) }))}</div><div class="s">${esc(dayKeyStr(m.start))} ~ ${esc(dayKeyStr(m.end))}</div></div></div>`;
+    if (m.status === 'over') return `<p class="muted small">${src}</p>${grid('–', '–')}<p class="note">${t('fsrc.over', { p: fmt(m.postNf), o: fmt(m.ovNf) })}</p>`;
+    return `<p class="muted small">${t('fsrc.note')}</p><p class="muted small">${src}</p>${grid(esc(pct(m.share, 0)), esc(pct(m.elsewhere, 0)))}<p class="muted small">${t('fsrc.caveat')}</p>`;
+  }
+
+  XA.detectPostLang = detectPostLang;
+  XA.favesFloor = favesFloor;
+  XA.xSearchUrl = xSearchUrl;
+  XA.fittingQueries = fittingQueries;
+  XA.replyTargets = replyTargets;
+  XA.weeklyActions = weeklyActions;
+  XA.followShare = followShare;
+  XA.followShareInner = followShareInner;
+  XA.pairForContent = pairForContent;
+  XA.pairForOverview = pairForOverview;
+  XA.cleanTerm = cleanTerm;
 
   /* ---------- 렌더링 ---------- */
   function render(A, isSample, keepScroll) {
@@ -376,19 +696,28 @@
     };
     $('#heat-metric').onchange = heat; heat();
 
-    // 훅
-    if (A.hasText) {
-      const HP = O.length ? O : P;
-      const rowsH = HOOKS.map(([id, fn]) => { const w = HP.filter((p) => fn(p.text)), wo = HP.filter((p) => !fn(p.text)); const a = agg(w), b = agg(wo); return { id, a, b, lift: b.br ? a.br / b.br : a.br ? Infinity : 0 }; });
-      XA._hooks = rowsH;
+    // 훅 (제안·맞는 사람 찾기·이번 주 할 일이 같이 씀)
+    const hookBase = O.length ? O : P;
+    XA._hooks = A.hasText ? hookRows(hookBase) : null;
+    if (XA._hooks) {
       $('#hook-table').innerHTML = `<thead><tr>${['hook', 'used', 'hookImp', 'hookLikes', 'hookBr', 'lift'].map((k) => `<th>${t('th.' + k)}</th>`).join('')}</tr></thead><tbody>` +
-        rowsH.map((r) => `<tr><td>${esc(t('hook.' + r.id))}</td><td>${r.a.n}</td><td>${r.a.n ? fmt(r.a.medImp) : '-'} / ${fmt(r.b.medImp)}</td><td>${r.a.n ? f1(r.a.avgLikes) : '-'} / ${f1(r.b.avgLikes)}</td><td>${r.a.n ? pct(r.a.br) : '-'} / ${pct(r.b.br)}</td><td class="${r.a.n >= 3 && r.lift >= 1.5 ? 'hi' : r.a.n >= 3 && r.lift < 0.7 ? 'lo' : ''}">${r.a.n ? (isFinite(r.lift) ? t('unit.times', { n: r.lift.toFixed(1) }) : '∞') : '-'}${r.a.n && r.a.n < 3 ? ` <span class="muted small">${t('hook.small')}</span>` : ''}</td></tr>`).join('') + '</tbody>';
+        XA._hooks.map((r) => `<tr><td>${esc(t('hook.' + r.id))}</td><td>${r.a.n}</td><td>${r.a.n ? fmt(r.a.medImp) : '-'} / ${fmt(r.b.medImp)}</td><td>${r.a.n ? f1(r.a.avgLikes) : '-'} / ${f1(r.b.avgLikes)}</td><td>${r.a.n ? pct(r.a.br) : '-'} / ${pct(r.b.br)}</td><td class="${r.a.n >= 3 && r.lift >= 1.5 ? 'hi' : r.a.n >= 3 && r.lift < 0.7 ? 'lo' : ''}">${r.a.n ? (isFinite(r.lift) ? t('unit.times', { n: r.lift.toFixed(1) }) : '∞') : '-'}${r.a.n && r.a.n < 3 ? ` <span class="muted small">${t('hook.small')}</span>` : ''}</td></tr>`).join('') + '</tbody>';
     } else $('#hook-table').innerHTML = `<tbody><tr><td>${t('hook.noText')}</td></tr></tbody>`;
 
     // 제안 & 시리즈
     const S = suggestions(A, allO, byCatO, timedO, O.length ? O : A.posts);
     $('#suggest').innerHTML = S.sug.map((s) => `<div class="card sug"><div class="t">${s.t}</div><p>${s.p}</p></div>`).join('');
     $('#series').innerHTML = S.series.map((s, i) => `<div class="card ser"><div class="n">${t('series.n', { n: i + 1 })}</div><div class="t">${s.t}</div><p>${s.p}</p></div>`).join('');
+
+    const actions = weeklyActions(A);
+    const actBox = $('#actions');
+    if (actBox) actBox.innerHTML = actions.map((s, i) => `<div class="action" data-act="${esc(s.id)}"><div class="n">${esc(t('act.n', { n: i + 1 }))}</div><div class="t">${s.t}</div><p>${s.p}</p></div>`).join('');
+    const fsBox = $('#follow-src');
+    if (fsBox) fsBox.innerHTML = followShareInner('content', isSample);
+    const fitBox = $('#fit');
+    if (fitBox) fitBox.innerHTML = fitHTML(A, hookBase, byCatO);
+    const rtBox = $('#rtarget');
+    if (rtBox) rtBox.innerHTML = rtargetHTML(RP);
     if (!keepScroll) $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -489,7 +818,16 @@
   }
   function handleText(text, isSample) {
     showErr(null);
-    try { const A = analyze(parseCSV(text)); XA.last = A; XA._isSample = isSample; XA.includeReplies = false; if (A.mode === 'overview') { $('#results').hidden = true; XA.renderOverview(A, isSample); } else { const o = $('#overview'); if (o) o.hidden = true; render(A, isSample); } }
+    try {
+      const A = analyze(parseCSV(text)); XA.last = A; XA._isSample = isSample; XA.includeReplies = false;
+      if (A.mode === 'overview') {
+        XA.lastOverview = A; XA.lastOverviewSample = !!isSample;
+        $('#results').hidden = true; XA.renderOverview(A, isSample);
+      } else {
+        XA.lastContent = A; XA.lastContentSample = !!isSample;
+        const o = $('#overview'); if (o) o.hidden = true; render(A, isSample);
+      }
+    }
     catch (e) { console.warn(e); showErr(e); }
   }
   XA.handleText = handleText;

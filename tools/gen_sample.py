@@ -1,4 +1,5 @@
-"""EXAMPLE 샘플 데이터 생성기 — 가상의 계정(@example_creator), 가상의 게시물 80개.
+"""EXAMPLE 샘플 데이터 생성기 — 가상의 계정(@example_creator).
+원글 80개 + 답글 14개. 답글의 @아이디(example_alpha 등)는 실존하지 않는 가상 핸들.
 X 콘텐츠 분석 CSV(영문 헤더) 형식을 흉내냄. 실제 사람/계정 데이터 아님."""
 import csv, random, datetime as dt
 random.seed(20261023)
@@ -108,6 +109,31 @@ for cat, (n, med, br, lr, er) in P.items():
         rows.append((t, [pid, t.strftime('%a, %b %d, %Y'), T[cat][i % len(T[cat])],
                          f"https://x.com/example_creator/status/{pid}", imp, likes, eng, b, sh, nf,
                          rep, rt, prof, det, url, 0, 0]))
+# 답글은 시드를 타지 않는 고정값. 순위가 샘플에서 항상 같게: alpha(팔로우·프로필) > beta > delta(1개) > echo > gamma(노출만, 성과 0).
+REPLY_ROWS = [
+    # handle, text, day, hour, minute, imp, likes, bm, shares, nf, rep, rt, prof, det, url
+    ("example_alpha", "@example_alpha 자막 정리 글 보고 순서를 바꿔봤어요", 5, 21, 10, 420, 6, 1, 0, 2, 0, 0, 5, 2, 0),
+    ("example_alpha", "@example_alpha 무료 툴 목록 저장해 둘게요", 12, 20, 5, 380, 4, 0, 0, 1, 0, 0, 4, 1, 0),
+    ("example_alpha", "@example_alpha 프롬프트 예시가 바로 쓸 만했어요", 18, 19, 40, 260, 3, 0, 0, 0, 1, 0, 2, 1, 0),
+    ("example_alpha", "@example_alpha 썸네일 단계 따라 해 봤어요", 22, 21, 15, 190, 2, 0, 0, 0, 0, 0, 1, 0, 0),
+    ("example_beta", "@example_beta 영상 크레딧 비교 도움이 됐어요", 8, 13, 20, 240, 3, 0, 0, 1, 0, 0, 3, 1, 0),
+    ("example_beta", "@example_beta 음악 툴은 아직 테스트 중이에요", 15, 18, 30, 160, 2, 0, 0, 0, 0, 0, 2, 0, 0),
+    ("example_beta", "@example_beta 폰트 모음 링크 열어봤어요", 25, 11, 5, 110, 1, 0, 0, 0, 0, 0, 1, 0, 0),
+    ("example_gamma", "@example_gamma ㅋㅋ 그렇군요", 3, 9, 10, 520, 2, 0, 0, 0, 0, 0, 0, 1, 0),
+    ("example_gamma", "@example_gamma 오 신기하네요", 9, 8, 45, 410, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+    ("example_gamma", "@example_gamma 재밌어요", 16, 10, 20, 330, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+    ("example_gamma", "@example_gamma 잘 봤습니다", 27, 15, 5, 250, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    ("example_echo", "@example_echo 오늘 글도 읽었어요", 11, 7, 30, 90, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+    ("example_echo", "@example_echo 다음 편도 기대할게요", 19, 23, 10, 70, 0, 0, 0, 0, 0, 0, 1, 0, 0),
+    ("example_delta", "@example_delta 그 실험 결과 궁금해요", 14, 20, 50, 150, 2, 0, 0, 1, 0, 0, 3, 1, 0),
+]
+for handle, text, day, hr, minute, imp, likes, bm, shares, nf, rep, rt, prof, det, url in REPLY_ROWS:
+    when = start + dt.timedelta(days=day, hours=hr, minutes=minute)
+    eng = likes + rep + rt + bm + shares + prof + det + url
+    pid = snowflake(when)
+    rows.append((when, [pid, when.strftime('%a, %b %d, %Y'), text,
+                        f"https://x.com/example_creator/status/{pid}", imp, likes, eng, bm, shares, nf,
+                        rep, rt, prof, det, url, 0, 0]))
 rows.sort(key=lambda r: r[0], reverse=True)
 H = ["Post id","Date","Post text","Post Link","Impressions","Likes","Engagements","Bookmarks","Shares",
      "New follows","Replies","Reposts","Profile visits","Detail Expands","URL Clicks","Hashtag Clicks","Permalink Clicks"]
@@ -115,4 +141,4 @@ import os
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sample.csv'), 'w', newline='', encoding='utf-8') as f:
     w = csv.writer(f); w.writerow(H)
     for _, r in rows: w.writerow(r)
-print(len(rows), 'rows')
+print(len(rows), 'rows', sum(1 for _, r in rows if str(r[2]).lstrip().startswith('@')), 'replies')
