@@ -67,7 +67,7 @@ def check_header(page, label, mobile=False):
     return m
 HANGUL = re.compile(r'[가-힣]')
 KANA = re.compile(r'[\u3040-\u30ff]')
-RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
+RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit|act|fit|fsrc|rtarget)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
 SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js']
 
 # ---------- 정적 검사: 실제 데이터 흔적 ----------
@@ -133,7 +133,10 @@ try:
           for(let d=0;d<7;d++){k.push('day.'+d,'dayFull.'+d)};['cat','n','share','medImp','avgLikes','avgBm','er','br','nfr','prof','hook','used','hookImp','hookLikes','hookBr','lift'].forEach(x=>k.push('th.'+x));
           ['dow','days','imp','eng','bm','net','posts','bucket','medImp','ipp','medNet','er'].forEach(x=>k.push('ov.th.'+x));['0','1to3','4plus'].forEach(x=>k.push('ov.bucket.'+x));
           ['take','hook','len','time','media','end'].forEach(x=>k.push('diag.c.'+x));['prompt','list','steps','link'].forEach(x=>k.push('diag.take.'+x));['image','video','gif'].forEach(x=>k.push('diag.media.'+x));
-          ['free','beforePay','prompt'].forEach(x=>k.push('serhook.'+x));return k})()""")
+          ['free','beforePay','prompt'].forEach(x=>k.push('serhook.'+x));
+          ['handle','replies','rtNf','rtProf','rtImp','rtEach'].forEach(x=>k.push('th.'+x));
+          ['ko','en','ja','none'].forEach(x=>k.push('fit.lang.'+x));
+          return k})()""")
         used |= set(dyn)
         used = {k for k in used if not k.endswith('.')}  # t('cat.'+id) 같은 동적 접두어는 위 dyn에서 따로 검사
         missing_used = sorted(k for k in used if k not in keys['ko'])
@@ -155,13 +158,67 @@ try:
 
         # ---------- 샘플 (내장 samples.js) ----------
         pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])'); pg.wait_for_timeout(800)
-        n = pg.evaluate('XA.last.posts.length'); check(n == 80, f'샘플 게시물 수 {n}')
+        n = pg.evaluate('XA.last.posts.length'); check(n == 94, f'샘플 게시물 수 {n}')
         cats = pg.evaluate('Object.entries(XA.last.posts.reduce((a,p)=>(a[p.cat]=(a[p.cat]||0)+1,a),{}))'); print('  카테고리 분포', cats)
-        check(pg.evaluate("XA.last.timeSrc.id") == 80, 'ID→시각 복원 80개')
+        check(pg.evaluate("XA.last.timeSrc.id") == 94, 'ID→시각 복원 94개')
+        check(pg.evaluate('XA.last.nReply') == 14, '샘플 가상 답글 14개')
         check(pg.locator('#cat-table tbody tr').count() >= 6, '카테고리 표 6행 이상')
         check(pg.locator('#top5 li').count() == 5 and pg.locator('#bottom5 li').count() == 5, 'TOP/BOTTOM 5')
         check(pg.locator('#suggest .sug').count() >= 3, f"제안 {pg.locator('#suggest .sug').count()}개")
         check(pg.locator('#series .ser').count() == 3, '시리즈 3개')
+        acts = pg.evaluate('XA.weeklyActions(XA.last).map(a=>a.id)')
+        check(len(acts) == 3 and 'more' in acts and 'reply' in acts and 'time' in acts, f'이번 주 할 일 {acts}')
+        check(pg.locator('#actions .action').count() == 3, '이번 주 할 일 카드 3장')
+        rt = pg.evaluate("""()=>{const R=XA.replyTargets(XA.last.posts.filter(p=>p.isReply));return {order:R.rows.map(r=>r.key),keep:R.keep.map(r=>r.key),drop:R.drop.map(r=>r.key),watch:R.watch.map(r=>r.key)}}""")
+        check(rt['order'][0] == 'example_alpha' and rt['order'][-1] == 'example_gamma', f"답글 순위 {rt['order']}")
+        check('example_alpha' in rt['keep'] and 'example_gamma' in rt['drop'] and 'example_delta' in rt['watch'] and 'example_echo' not in rt['drop'] and 'example_delta' not in rt['drop'], f'계속/없음/표본 {rt}')
+        rtxt = pg.inner_text('#rtarget')
+        check('상관' in rtxt and 'example_alpha' in rtxt and 'example_gamma' in rtxt and '표본 적음' in rtxt, '답글 순위 문구·핸들·표본 주의')
+        links = pg.evaluate("""()=>[...document.querySelectorAll('#fit a, #rtarget a')].map(a=>({h:a.getAttribute('href'),t:a.target,r:a.rel}))""")
+        check(links and all(x['t'] == '_blank' and 'noopener' in (x['r'] or '') for x in links), f'검색·프로필 링크 새 탭+noopener ({len(links)}개)')
+        check(all(x['h'].startswith('https://x.com/') and not x['h'].startswith('http://') for x in links), '링크는 https://x.com 만')
+        qs = pg.evaluate("""()=>[...document.querySelectorAll('#fit a')].map(a=>({q:new URL(a.href).searchParams.get('q'),f:new URL(a.href).searchParams.get('f')}))""")
+        check(qs and all('lang:ko' in x['q'] and '-filter:replies' in x['q'] and 'min_faves:' in x['q'] for x in qs), f"검색 연산자 {qs[:1]}")
+        check(any(x['f'] == 'live' for x in qs) and any(x['f'] == 'user' for x in qs) and set(x['f'] for x in qs) <= {'live', 'user'}, f"최신/사람 탭 {[x['f'] for x in qs]}")
+        share = pg.evaluate("""()=>{const p=XA.pairForContent(true);const s=XA.followShare(XA.lastContent.posts,p.ov);return {kind:p.kind,status:s.status,share:s.share,post:s.postNf,ov:s.ovNf}}""")
+        check(share['kind'] == 'sample' and share['status'] == 'ok' and 0 <= share['share'] < 1 and share['ov'] > share['post'], f'예시 팔로우 비율 {share}')
+        check('예시' in pg.inner_text('#follow-src') and 'EXAMPLE' in pg.inner_text('#follow-src'), '팔로우 비율에 EXAMPLE 안내')
+        logic = pg.evaluate("""()=>{
+          const R = XA.replyTargets([
+            {text:'@AbC hi', replyTo:'AbC', nf:1, prof:1, imp:10, likes:0},
+            {text:'@abc yo', replyTo:'abc', nf:2, prof:1, imp:10, likes:0},
+            {text:'@zero a', replyTo:'zero', nf:0, prof:0, imp:5, likes:0},
+            {text:'@zero b', replyTo:'zero', nf:0, prof:0, imp:5, likes:0},
+            {text:'@zero c', replyTo:'zero', nf:0, prof:0, imp:5, likes:0},
+            {text:'@once z', replyTo:'once', nf:5, prof:1, imp:3, likes:0}
+          ]);
+          const abc = R.rows.find(r => r.key === 'abc');
+          const lang = [XA.detectPostLang([{text:'한글 글입니다'}]), XA.detectPostLang([{text:'English post about tools'}]), XA.detectPostLang([{text:'日本語の投稿です'}])];
+          const floor = [XA.favesFloor([{likes:3},{likes:3}]), XA.favesFloor([{likes:40}]), XA.favesFloor([{likes:500}])];
+          const no = XA.followShare([{ms:Date.UTC(2020,0,1), nf:3}], {map:{nf:1}, days:[{key:Date.UTC(2024,0,1), nf:10}]});
+          const ok = XA.followShare([{ms:Date.UTC(2024,0,2,3), nf:4},{ms:Date.UTC(2024,0,3,3), nf:6}], {map:{nf:1}, days:[{key:Date.UTC(2024,0,2), nf:20},{key:Date.UTC(2024,0,5), nf:50}]});
+          const over = XA.followShare([{ms:Date.UTC(2024,0,2,3), nf:30}], {map:{nf:1}, days:[{key:Date.UTC(2024,0,2), nf:10}]});
+          const savedOv = XA.lastOverview, savedFlag = XA.lastOverviewSample;
+          XA.lastOverview = {mode:'overview', map:{nf:1}, days:[{key:1, nf:9}]};
+          XA.lastOverviewSample = false;
+          const mismatch = XA.pairForContent(true).kind;
+          XA.lastOverview = savedOv; XA.lastOverviewSample = savedFlag;
+          const cleaned = [XA.cleanTerm('lang:en'), XA.cleanTerm('min_faves:10'), XA.cleanTerm('AI 이미지')];
+          const q = XA.fittingQueries([
+            {isReply:false, text:'무료 AI 이미지 툴 정리\\n1. a\\n2. b', cat:'guide', likes:12, bm:4, imp:100},
+            {isReply:false, text:'AI 이미지 프롬프트 정리\\n1. a\\n2. b', cat:'guide', likes:10, bm:3, imp:80},
+            {isReply:false, text:'AI 이미지 업스케일 방법\\n1. a\\n2. b', cat:'guide', likes:9, bm:2, imp:70}
+          ], [], [{c:'guide', n:3, br:0.03, er:0.05}], true);
+          const urlsOk = q.queries.length > 0 && q.queries.every(x => x.postsUrl.startsWith('https://x.com/search?') && x.peopleUrl.startsWith('https://x.com/search?') && x.q.includes('lang:ko') && x.q.includes('-filter:replies') && /min_faves:\\d+/.test(x.q));
+          return {abcN: abc && abc.n, abcNf: abc && abc.nf, drop: R.drop.map(r=>r.key), watch: R.watch.map(r=>r.key), keep: R.keep.map(r=>r.key), lang, floor, no: no.status, ok: ok.status, share: ok.share, over: over.status, mismatch, cleaned, urlsOk, nq: q.queries.length};
+        }""")
+        check(logic['abcN'] == 2 and logic['abcNf'] == 3 and logic['drop'] == ['zero'] and logic['watch'] == ['once'] and 'abc' in logic['keep'] and 'once' not in logic['keep'], f"핸들 묶기 {logic}")
+        check(logic['lang'] == ['ko', 'en', 'ja'] and logic['floor'] == [5, 40, 100], f"언어·min_faves {logic['lang']} {logic['floor']}")
+        check(logic['no'] == 'noOverlap' and logic['ok'] == 'ok' and abs(logic['share'] - 0.5) < 1e-9 and logic['over'] == 'over' and logic['mismatch'] == 'mismatch', f"팔로우 비율 로직 {logic}")
+        check(logic['cleaned'][0] == '' and logic['cleaned'][1] == '' and logic['cleaned'][2] == 'AI 이미지' and logic['urlsOk'], f"검색어 정리 {logic['cleaned']} nq={logic['nq']}")
+        for sel, name in [('#actions-block', 'v2_11_actions_ko'), ('#follow-block', 'v2_12_follow_ko'), ('#fit-block', 'v2_13_fit_ko'), ('#rtarget-block', 'v2_14_replies_ko')]:
+            pg.locator(sel).scroll_into_view_if_needed(); pg.wait_for_timeout(150)
+            pg.locator(sel).screenshot(path=f'{SHOT}/{name}.png')
         check(pg.locator('.heat .c').count() == 168, '히트맵 168칸')
         ci = pg.inner_text('#col-info'); check('인식한 칸(17개)' in ci and '없는 칸: 없음' in ci, f'인식한 칸 표시 유지: {ci[:80]}')
         print('  제안:', pg.eval_on_selector_all('#suggest .t', 'els=>els.map(e=>e.textContent)'))
@@ -289,10 +346,12 @@ try:
         check(pg.evaluate('document.documentElement.lang') == 'en' and pg.evaluate("localStorage.getItem('xa-lang')") == 'en', 'EN 전환: <html lang=en> + localStorage 저장')
         body = pg.inner_text('body')
         check('Unofficial tool, not affiliated with X (formerly Twitter)' in body and 'Made by tuki(툭이) @Ty_Tuki0609' in re.sub(r'\s+', ' ', pg.inner_text('.topbar')), '영어 비공식 안내 + 제작자 표시')
-        for sel in ['#summary', '#cat-table', '#hook-table', '#col-info', '.tabs', '#suggest', '#rank-metric', '#heat-metric', '#time-src', '#hour-blocks']:
-            tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);return e.textContent}})()")
+        for sel in ['#summary', '#cat-table', '#hook-table', '#col-info', '.tabs', '#suggest', '#rank-metric', '#heat-metric', '#time-src', '#hour-blocks', '#actions', '#follow-src', '#rtarget']:
+            tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent}})()")
             # 제안 카드에는 샘플 본문의 한국어 소재가 따옴표로 들어갈 수 있음 → 카테고리 이름 외 한글 없음
             check(not HANGUL.search(tx), f'EN 모드 {sel} 한글 없음 {HANGUL.findall(tx)[:5]}')
+        fit_en = pg.evaluate("(()=>{const e=document.querySelector('#fit').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent})()")
+        check(not HANGUL.search(fit_en) and 'min_faves:' in pg.inner_text('#fit') and 'People' in pg.inner_text('#fit'), f'EN 맞는 사람 찾기 크롬 {HANGUL.findall(fit_en)[:5]}')
         check(not RAWKEY.search(body), f'EN 모드 빠진 번역 키 노출 없음 {RAWKEY.findall(body)[:5]}')
         pg.evaluate("document.querySelector('#results').scrollIntoView();window.scrollBy(0,-100)"); pg.wait_for_timeout(300)
         pg.screenshot(path=f'{SHOT}/v2_06_results_en.png')
@@ -330,9 +389,11 @@ try:
         check(pg.evaluate('document.documentElement.lang') == 'ja' and pg.evaluate("localStorage.getItem('xa-lang')") == 'ja', 'JA 전환: <html lang=ja> + localStorage')
         check('制作者:' in re.sub(r'\s+', ' ', pg.inner_text('.topbar')) and 'X（旧Twitter）とは無関係の非公式ツールです' in pg.inner_text('body'), '일본어 비공식 안내 + 제작자 표시')
         check(KANA.search(pg.inner_text('h1')) and not HANGUL.search(pg.inner_text('.hero')) and not HANGUL.search(pg.inner_text('.tabs')), 'JA 히어로·탭에 한글 없음, 가나 있음')
-        for sel in ['#summary', '#cat-table', '#hook-table', '#col-info', '.tabs', '#suggest', '#rank-metric', '#heat-metric', '#time-src', '#hour-blocks']:
-            tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);return e.textContent}})()")
+        for sel in ['#summary', '#cat-table', '#hook-table', '#col-info', '.tabs', '#suggest', '#rank-metric', '#heat-metric', '#time-src', '#hour-blocks', '#actions', '#follow-src', '#rtarget']:
+            tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent}})()")
             check(not HANGUL.search(tx), f'JA 모드 {sel} 한글 없음 {HANGUL.findall(tx)[:5]}')
+        fit_ja = pg.evaluate("(()=>{const e=document.querySelector('#fit').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent})()")
+        check(not HANGUL.search(fit_ja) and KANA.search(fit_ja), f'JA 맞는 사람 찾기 {HANGUL.findall(fit_ja)[:5]}')
         check(not RAWKEY.search(pg.inner_text('body')), f'JA 모드 빠진 번역 키 노출 없음 {RAWKEY.findall(pg.inner_text("body"))[:5]}')
         for wh in ((1280, 900), (1440, 900), (1024, 800)):
             pg.set_viewport_size({'width': wh[0], 'height': wh[1]}); pg.wait_for_timeout(60)
@@ -360,7 +421,7 @@ try:
         fp.on('pageerror', lambda e: ferr.append(str(e))); fp.on('console', lambda m: m.type == 'error' and ferr.append(m.text))
         fp.on('request', lambda r: (not r.url.startswith('file://')) and not r.url.startswith('data:') and freq.append(r.url))
         fp.goto(FILE_URL); fp.click('#btn-sample'); fp.wait_for_selector('#results:not([hidden])', timeout=5000); fp.wait_for_timeout(500)
-        ok1 = fp.evaluate('XA.last.posts.length') == 80
+        ok1 = fp.evaluate('XA.last.posts.length') == 94
         fp.click('#btn-sample-ov'); fp.wait_for_selector('#overview:not([hidden])', timeout=5000)
         fp.set_input_files('#file', f'{ROOT}/sample.csv'); fp.wait_for_selector('#results:not([hidden])', timeout=5000)
         fp.click('.tab[data-tab=help]'); fp.click('[data-lang-toggle] button[data-lang=en]')
