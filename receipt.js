@@ -355,6 +355,32 @@
     </div>`;
   }
 
+  function fontPx(g) {
+    const m = String(g.font).match(/(\d+(?:\.\d+)?)px/);
+    return m ? Number(m[1]) : 16;
+  }
+  function measureInk(g, text) {
+    const raw = String(text || '');
+    const probe = raw.trim() ? raw : 'Ag가';
+    const m = g.measureText(probe);
+    const size = fontPx(g);
+    let ascent = m.fontBoundingBoxAscent;
+    let descent = m.fontBoundingBoxDescent;
+    if (!(ascent > 0) || !(descent >= 0)) {
+      ascent = m.actualBoundingBoxAscent || 0;
+      descent = m.actualBoundingBoxDescent || 0;
+    }
+    if (!(ascent + descent >= size * 0.9)) {
+      ascent = size * 0.8;
+      descent = size * 0.25;
+    }
+    return { ascent: ascent, descent: descent, h: ascent + descent, w: g.measureText(raw).width };
+  }
+  function pushInk(layout, id, x, y, w, h) {
+    if (!layout || !(w > 0) || !(h > 0)) return;
+    layout.push({ id: id, x: x, y: y, w: w, h: h });
+  }
+
   function wrapText(g, text, maxW) {
     const out = [];
     let line = '';
@@ -379,110 +405,167 @@
     });
   }
 
-  function paintReceipt(g, model, W, H) {
+  function paintReceipt(g, model, W, H, layout) {
     g.fillStyle = '#efe7d6';
     g.fillRect(0, 0, W, H);
     g.fillStyle = '#f7f3ea';
-    g.fillRect(48, 24, W - 96, H - 48);
-    g.fillStyle = '#1c1917';
+    g.fillRect(48, 24, W - 96, Math.max(0, H - 48));
+    g.textBaseline = 'alphabetic';
     g.textAlign = 'center';
-    let y = 78;
-    g.font = '800 32px ' + FONT;
-    g.fillText(t('rc.star'), W / 2, y);
-    y += 40;
-    g.fillStyle = '#57534e';
-    g.font = '700 24px ' + FONT;
-    g.fillText(t('rc.guest'), W / 2, y);
-    y += 12;
+    g.fillStyle = '#1c1917';
+    let top = 48;
+
+    function space(n) { top += n; }
+    function inkGap(size) { space(Math.max(18, Math.round(size * 0.12))); }
+    function drawCentered(id, text, font, maxW, color, limit) {
+      g.font = font;
+      g.fillStyle = color || '#1c1917';
+      g.textAlign = 'center';
+      const lines = wrapText(g, text, maxW).slice(0, limit || 4);
+      const size = fontPx(g);
+      lines.forEach((ln, i) => {
+        if (i) space(4);
+        const box = measureInk(g, ln);
+        g.fillText(ln, W / 2, top + box.ascent);
+        pushInk(layout, id + '-' + i, W / 2 - box.w / 2, top, box.w, box.h);
+        top += box.h;
+      });
+      return size;
+    }
+    function drawLeftBlock(id, text, font, maxW) {
+      g.font = font;
+      g.fillStyle = '#1c1917';
+      g.textAlign = 'left';
+      const lines = wrapText(g, text, maxW);
+      lines.forEach((ln, i) => {
+        if (i) space(4);
+        const box = measureInk(g, ln);
+        g.fillText(ln, 110, top + box.ascent);
+        pushInk(layout, id + '-' + i, 110, top, box.w, box.h);
+        top += box.h;
+      });
+    }
+    function drawPair(id, label, value) {
+      let size = 30;
+      let lb;
+      let vb;
+      while (size >= 18) {
+        g.font = '600 ' + size + 'px ' + FONT;
+        lb = measureInk(g, label);
+        vb = measureInk(g, value);
+        if (lb.w + vb.w + 28 <= W - 220) break;
+        size -= 2;
+      }
+      g.font = '600 ' + size + 'px ' + FONT;
+      g.fillStyle = '#1c1917';
+      g.textAlign = 'left';
+      g.fillText(label, 110, top + lb.ascent);
+      pushInk(layout, id + '-l', 110, top, lb.w, lb.h);
+      g.textAlign = 'right';
+      g.fillText(value, W - 110, top + vb.ascent);
+      pushInk(layout, id + '-r', W - 110 - vb.w, top, vb.w, vb.h);
+      top += Math.max(lb.h, vb.h);
+    }
+
+    let size = drawCentered('star', t('rc.star'), '800 32px ' + FONT, W - 180, '#1c1917', 2);
+    inkGap(size);
+    size = drawCentered('guest', t('rc.guest'), '700 24px ' + FONT, W - 180, '#57534e', 2);
+    inkGap(size);
     const grade = t(GRADE_NAME[model.grade]);
     let gsize = 92;
     while (gsize > 68) {
       g.font = '900 ' + gsize + 'px ' + FONT;
-      if (g.measureText(grade).width <= W - 160) break;
+      if (g.measureText(grade).width <= W - 180) break;
       gsize -= 4;
     }
-    g.font = '900 ' + gsize + 'px ' + FONT;
-    g.fillStyle = '#1c1917';
-    wrapText(g, grade, W - 160).slice(0, 2).forEach((ln) => { y += gsize + 6; g.fillText(ln, W / 2, y); });
-    y += 22;
+    size = drawCentered('grade', grade, '900 ' + gsize + 'px ' + FONT, W - 180, '#1c1917', 3);
+    inkGap(size);
     g.font = '800 32px ' + FONT;
-    const tease = wrapText(g, t(GRADE_LINE[model.grade]), W - 240).slice(0, 3);
-    const boxH = 24 + tease.length * 44;
+    const teaseLines = wrapText(g, t(GRADE_LINE[model.grade]), W - 280).slice(0, 3);
+    const teaseMetrics = teaseLines.map((ln) => measureInk(g, ln));
+    let teaseInner = 0;
+    teaseMetrics.forEach((m, i) => { teaseInner += m.h; if (i) teaseInner += 6; });
+    const teasePad = 16;
+    const boxH = teaseInner + teasePad * 2;
     g.fillStyle = '#ffffff';
-    roundRect(g, 100, y, W - 200, boxH, 18);
+    roundRect(g, 100, top, W - 200, boxH, 18);
     g.fill();
+    let ty = top + teasePad;
+    g.font = '800 32px ' + FONT;
     g.fillStyle = '#1c1917';
-    tease.forEach((ln, i) => g.fillText(ln, W / 2, y + 40 + i * 44));
-    y += boxH + 40;
-    g.font = '800 34px ' + FONT;
+    g.textAlign = 'center';
+    teaseLines.forEach((ln, i) => {
+      if (i) ty += 6;
+      const box = teaseMetrics[i];
+      g.fillText(ln, W / 2, ty + box.ascent);
+      pushInk(layout, 'tease-' + i, W / 2 - box.w / 2, ty, box.w, box.h);
+      ty += box.h;
+    });
+    top += boxH;
+    inkGap(32);
     const head = model.headlineKind === 'miss' ? t('rc.headlineMiss') : (model.headline == null ? t('rc.headlineSold') : t('rc.headline', { n: fmtInt(model.headline) }));
-    wrapText(g, head, W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 42; });
-    g.font = '600 26px ' + FONT;
+    size = drawCentered('head', head, '800 34px ' + FONT, W - 180, '#1c1917', 3);
+    inkGap(size);
     const handleLine = !model.handle ? t('rc.noHandle') : (model.hideHandle ? t('rc.handleHidden') : '@' + model.handle);
-    g.fillText(handleLine, W / 2, y + 4);
-    y += 36;
-    g.fillText(model.period ? (model.period.from === model.period.to ? model.period.from : t('rc.period', model.period)) : t('rc.noDate'), W / 2, y);
-    y += 34;
-    g.font = '600 24px ' + FONT;
-    g.fillText(t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtInt(model.n) }), W / 2, y);
-    y += 22;
+    size = drawCentered('handle', handleLine, '600 26px ' + FONT, W - 180, '#1c1917', 2);
+    inkGap(size);
+    size = drawCentered('period', model.period ? (model.period.from === model.period.to ? model.period.from : t('rc.period', model.period)) : t('rc.noDate'), '600 26px ' + FONT, W - 180, '#1c1917', 2);
+    inkGap(size);
+    size = drawCentered('basis', t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtInt(model.n) }), '600 24px ' + FONT, W - 180, '#1c1917', 2);
+    inkGap(size);
     g.strokeStyle = '#44403c';
     g.lineWidth = 2;
     g.setLineDash([8, 8]);
-    g.beginPath(); g.moveTo(110, y); g.lineTo(W - 110, y); g.stroke();
+    g.beginPath(); g.moveTo(110, top); g.lineTo(W - 110, top); g.stroke();
     g.setLineDash([]);
-    y += 46;
-    g.textAlign = 'left';
-    g.font = '600 30px ' + FONT;
-    g.fillStyle = '#1c1917';
-    model.lines.forEach((l) => {
-      g.fillText(l.label, 110, y);
-      g.textAlign = 'right';
-      g.fillText(l.sold ? t('rc.sold') : (fmtInt(l.rounded) + '  ' + t('rc.unit')), W - 110, y);
-      g.textAlign = 'left';
-      y += 44;
+    space(16);
+    (model.lines || []).forEach((l) => {
+      drawPair(l.key, l.label, l.sold ? t('rc.sold') : (fmtInt(l.rounded) + '  ' + t('rc.unit')));
+      space(14);
     });
-    g.font = '500 26px ' + FONT;
-    if (model.expensive) { y += 6; wrapText(g, t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
-    if (model.cheap) { wrapText(g, t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
-    if (!model.hideSnippet && model.expensive && model.expensive.snippet) { g.fillText(model.expensive.snippet, 110, y); y += 34; }
-    if (model.refund) { g.fillText(t('rc.refund') + '  ' + fmtInt(model.refund.qty), 110, y); y += 36; }
-    if (model.coupon) { wrapText(g, t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
-    y += 8;
+    if (model.expensive) drawLeftBlock('exp', t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }), '500 26px ' + FONT, W - 220);
+    if (model.cheap) { space(12); drawLeftBlock('cheap', t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }), '500 26px ' + FONT, W - 220); }
+    if (!model.hideSnippet && model.expensive && model.expensive.snippet) { space(12); drawLeftBlock('snip', model.expensive.snippet, '500 24px ' + FONT, W - 220); }
+    if (model.refund) { space(12); drawPair('refund', t('rc.refund'), fmtInt(model.refund.qty)); }
+    if (model.coupon) { space(12); drawLeftBlock('coupon', t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }), '500 26px ' + FONT, W - 220); }
+    space(16);
     g.setLineDash([8, 8]);
-    g.beginPath(); g.moveTo(110, y); g.lineTo(W - 110, y); g.stroke();
+    g.beginPath(); g.moveTo(110, top); g.lineTo(W - 110, top); g.stroke();
     g.setLineDash([]);
-    y += 42;
-    g.font = '800 30px ' + FONT;
-    if (model.nfQty != null) { g.fillText(t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }), 110, y); y += 36; }
-    if (model.missingLabels.length) {
-      g.font = '400 24px ' + FONT;
-      wrapText(g, t('rc.missing', { cols: model.missingLabels.join(', ') }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 30; });
+    space(18);
+    if (model.nfQty != null) {
+      drawLeftBlock('sum', t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }), '800 30px ' + FONT, W - 220);
+      space(16);
     }
-    y += 12;
-    drawBarcode(g, 120, y, W - 240, 70, model.imp);
-    y += 96;
-    g.textAlign = 'center';
-    g.fillStyle = '#1c1917';
-    g.font = '900 36px ' + FONT;
-    g.fillText(t('rc.thanks'), W / 2, y);
-    y += 40;
-    g.font = '700 24px ' + FONT;
-    g.fillText(t('brand.name') + '  ·  tuki0609.github.io/account-compass', W / 2, y);
-    return y + 28;
+    if (model.missingLabels && model.missingLabels.length) {
+      drawLeftBlock('miss', t('rc.missing', { cols: model.missingLabels.join(', ') }), '400 24px ' + FONT, W - 220);
+      space(16);
+    }
+    const barH = 70;
+    const barGap = 22;
+    space(barGap);
+    drawBarcode(g, 120, top, W - 240, barH, model.imp);
+    pushInk(layout, 'barcode', 120, top, W - 240, barH);
+    top += barH;
+    space(barGap);
+    drawCentered('thanks', t('rc.thanks'), '900 36px ' + FONT, W - 160, '#1c1917', 2);
+    inkGap(36);
+    drawCentered('brand', t('brand.name') + '  ·  tuki0609.github.io/account-compass', '700 24px ' + FONT, W - 160, '#1c1917', 2);
+    return top + 8;
   }
 
   XA.receiptDraw = function (model) {
     const W = 1080;
     const scratch = document.createElement('canvas');
     scratch.width = W;
-    scratch.height = 2200;
-    const bottom = paintReceipt(scratch.getContext('2d'), model, W, 2200);
-    const H = Math.max(720, bottom + 20);
+    scratch.height = 3200;
+    const bottom = paintReceipt(scratch.getContext('2d'), model, W, 3200, null);
+    const H = Math.max(720, Math.ceil(bottom + 56));
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
-    paintReceipt(c.getContext('2d'), model, W, H);
+    c._layout = [];
+    paintReceipt(c.getContext('2d'), model, W, H, c._layout);
     return c;
   };
 

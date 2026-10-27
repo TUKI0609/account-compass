@@ -135,8 +135,7 @@ for handle, text, day, hr, minute, imp, likes, bm, shares, nf, rep, rt, prof, de
                         f"https://x.com/example_creator/status/{pid}", imp, likes, eng, bm, shares, nf,
                         rep, rt, prof, det, url, 0, 0]))
 # 예시가 공유하기 좋은 결과가 되게, 이야기 글 하나의 노출만 키운다.
-# 한 방 지수 = 그 글의 노출 / 원글 노출 중앙값. 좋아요·북마크는 같이 키우지 않는다.
-# 영수증은 답글까지 더하므로, 그 글에 새 팔로우를 더해 팔로워 단가가 800 이하(가성비)가 되게 한다.
+# 한 방 지수 = 그 글의 노출 / 원글 노출 중앙값. 좋아요·북마크·새 팔로우는 그대로 둔다.
 STORY_MARK = "돈 쓰기 전에 이거부터 해보세요."
 story = next((rec for rec in rows if str(rec[1][2]).startswith(STORY_MARK)), None)
 if story is None:
@@ -147,11 +146,6 @@ base_vals = sorted(int(rec[1][4]) for rec in originals if rec is not story)
 # 원글 80개(이 글 포함)의 중앙값은, 이 글이 최대일 때 나머지 79개의 40·41번째 값의 평균이다.
 med = (base_vals[39] + base_vals[40]) / 2
 story[1][4] = int(round(med * 52))
-total_imp = sum(int(rec[1][4]) for rec in rows)
-total_nf = sum(int(rec[1][9]) for rec in rows)
-need = (total_imp + 639) // 640
-if need > total_nf:
-    story[1][9] = int(story[1][9]) + (need - total_nf)
 rows.sort(key=lambda r: r[0], reverse=True)
 H = ["Post id","Date","Post text","Post Link","Impressions","Likes","Engagements","Bookmarks","Shares",
      "New follows","Replies","Reposts","Profile visits","Detail Expands","URL Clicks","Hashtag Clicks","Permalink Clicks"]

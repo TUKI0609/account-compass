@@ -994,8 +994,9 @@ try:
             hideLine: document.getElementById('rc-hide-line').checked, hideHandle: document.getElementById('rc-hide-handle').checked,
             sample: !!paper.querySelector('.rc-flag') };
         }""")
-        check(rc['grade'] == rex['grade'] == 'value' and rc['kind'] == 'price' and int(rc['price']) == rex['headline'], f"예시 등급 {rc['grade']} {rex['grade']} 가격 {rc['price']} {rex['headline']}")
-        check('등급 사이' not in rc['paper'] and '여섯 등급' not in rc['paper'] and '가성비' in rc['paper'], '영수증은 가성비 한 등급이고 사이 문구가 없음')
+        grade_mark = {'luxury': '명품', 'value': '가성비', 'window': '구경꾼', 'save': '저장 창고', 'taste': '시식', 'first': '첫 손님'}
+        check(rc['grade'] == rex['grade'] and rc['grade'] in grade_mark and rc['kind'] == 'price' and int(rc['price']) == rex['headline'], f"예시 등급 {rc['grade']} {rex['grade']} 가격 {rc['price']} {rex['headline']}")
+        check('등급 사이' not in rc['paper'] and '여섯 등급' not in rc['paper'] and grade_mark[rex['grade']] in rc['paper'], '영수증은 계산된 한 등급이고 사이 문구가 없음')
         check(pg.get_attribute('#rc-barcode', 'data-seed') == str(int(rex['imp'])), '바코드 씨앗은 노출 합')
         check('total' not in rc['lines'] and 'imp' not in rc['lines'] and rc['refund'] is None, f"단위가 다른 합계·환불 줄 없음 {list(rc['lines'])}")
         for key, line in rex['lines'].items():
@@ -1043,7 +1044,7 @@ try:
         rw, rh = struct.unpack('>II', png[16:24])
         drawn = '\n'.join(pg.evaluate('window.__rcTexts'))
         check(png[:8] == b'\x89PNG\r\n\x1a\n' and rw == 1080 and 780 <= rh < 1350, f'영수증 PNG {rw}x{rh}')
-        check('@' + SAMPLE_RC['handle'] in drawn and (not snip or snip not in drawn) and '번 스침' not in drawn and '등급 사이' not in drawn and '가성비' in drawn and '올려 주셔서 고마워요' in drawn, '그림에 계정·가성비·감사 문구가 있고 가린 첫 줄·옛 합계·등급 사이는 없음')
+        check('@' + SAMPLE_RC['handle'] in drawn and (not snip or snip not in drawn) and '번 스침' not in drawn and '등급 사이' not in drawn and grade_mark[rex['grade']] in drawn and '올려 주셔서 고마워요' in drawn, '그림에 계정·등급·감사 문구가 있고 가린 첫 줄·옛 합계·등급 사이는 없음')
         open(f'{SHOT}/v2_25b_receipt_png.png', 'wb').write(png)
         pg.evaluate('window.__rcTexts = []')
         pg.check('#rc-hide-handle'); pg.wait_for_timeout(40)
@@ -1309,6 +1310,131 @@ try:
           return { a: a && a.key, b: b && b.key, c: c && c.key };
         }""")
         check(blocked['a'] == 'rc.why.empty' and blocked['b'] == 'rc.why.noImp' and blocked['c'] == 'ps.why.overview', f'빈 결과·노출 없음·개요 부캐는 숫자를 만들지 않음 {blocked}')
+        layout_chars = {
+            'save': posts_csv(build_posts(12, **{**base, 'bm': 20})),
+            'chat': posts_csv(build_posts(12, **{**base, 'rep': 20})),
+            'hit': posts_csv(build_posts(12, **{**base, 'imp': 10, 'spike': 100000})),
+            'ant': posts_csv(build_posts(12, length=100, imp=100, likes=10, bm=1, rep=1, rt=1, nf=0, prof=1, hour=12)),
+            'dawn': posts_csv(build_posts(12, **{**base, 'hour': 2})),
+            'magnet': posts_csv(build_posts(12, **{**base, 'imp': 1000, 'nf': 20, 'prof': 100, 'likes': 100, 'bm': 5, 'rep': 5, 'rt': 5})),
+            'window': posts_csv(build_posts(12, **{**base, 'imp': 1000, 'prof': 80, 'likes': 50, 'bm': 2})),
+            'repost': posts_csv(build_posts(12, **{**base, 'rt': 20})),
+            'link': posts_csv(build_posts(12, **{**base, 'text': 'https://example.com/a' + '가' * 79})),
+            'short': posts_csv(build_posts(12, **{**base, 'text': '가' * 12})),
+            'long': posts_csv(build_posts(12, **{**base, 'text': '가' * 400})),
+            'sprout': posts_csv(build_posts(8, **{**base, 'bm': 20})),
+        }
+        layout_grades = {
+            'first': posts_csv(build_posts(8, imp=9000, nf=1, likes=10, bm=1, rep=1, prof=1, length=100, spread=True)),
+            'luxury': posts_csv(build_posts(12, **{**common, 'imp': 5000})),
+            'value': posts_csv(build_posts(12, **{**common, 'imp': 800})),
+            'window': posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 21, 'likes': 100})),
+            'save': posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'likes': 100, 'bm': 200})),
+            'taste': posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'bm': 4, 'rep': 100})),
+        }
+        long_names = {
+            'ko': {'name': '아주 긴 이름의 저장각 이야기꾼 확장 카드', 'roast': '이 놀림 문장은 일부러 길어서 흰 상자 안에서 여러 줄이 됩니다. ' * 4, 'snip': '잘 된 글의 첫 줄도 길면 자기 칸에만 있어야 합니다'},
+            'en': {'name': 'The Extremely Long Bookmark Storyteller With A Wrapped Display Name', 'roast': 'This roast is intentionally long so the highlighted box wraps onto several lines and still clears the hit index. ' * 3, 'snip': 'A long first line stays on its own row under the weak spot'},
+            'ja': {'name': 'とても長い裏キャラの名前が二行に折り返される確認', 'roast': 'この文章は意図的に長くして、枠の中で複数行になっても次の行と重ならないようにしています。' * 3, 'snip': '最初の一行が長くても弱さの下に分かれます'},
+        }
+        overlaps = pg.evaluate("""(payload) => {
+          const fails = [];
+          const prevSample = !!XA._isSample;
+          const prevLang = XA.lang || 'ko';
+          function span(rects, pred) {
+            const rs = rects.filter(pred);
+            if (!rs.length) return null;
+            let top = Infinity, bot = -Infinity;
+            rs.forEach((r) => { if (r.y < top) top = r.y; const b = r.y + r.h; if (b > bot) bot = b; });
+            return { top: top, bot: bot };
+          }
+          function inspect(label, c, kind) {
+            const rects = c._layout || [];
+            if (rects.length < 8) { fails.push(label + ' rects ' + rects.length); return; }
+            const bad = [];
+            for (let i = 0; i < rects.length; i++) {
+              const a = rects[i];
+              if (a.y < -0.5 || a.x < -0.5 || a.y + a.h > c.height + 1 || a.x + a.w > c.width + 1) bad.push(a.id + ' out');
+              for (let j = i + 1; j < rects.length; j++) {
+                const b = rects[j];
+                const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+                const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+                if (ix > 0.5 && iy > 0.5) bad.push(a.id + ' ∩ ' + b.id);
+              }
+            }
+            if (bad.length) fails.push(label + ' ' + bad.slice(0, 8).join(' | '));
+            if (kind !== 'persona') return;
+            const em = span(rects, (r) => r.id === 'emoji');
+            const nm = span(rects, (r) => r.id.indexOf('name-') === 0);
+            const ht = span(rects, (r) => r.id.indexOf('hit-') === 0);
+            const hl = span(rects, (r) => r.id.indexOf('hitline') === 0);
+            const wk = span(rects, (r) => r.id.indexOf('weak-') === 0);
+            const hd = span(rects, (r) => r.id.indexOf('handle') === 0);
+            const sn = span(rects, (r) => r.id.indexOf('snip') === 0);
+            const ft = span(rects, (r) => r.id.indexOf('foot') === 0);
+            if (!em || !nm || !ht || !wk || !ft) { fails.push(label + ' missing'); return; }
+            const g1 = nm.top - em.bot;
+            if (g1 < 12) fails.push(label + ' emoji ' + g1);
+            if (!hl) fails.push(label + ' no hitline');
+            else if (hl.top - ht.bot < 12) fails.push(label + ' hit ' + (hl.top - ht.bot));
+            let cursor = wk;
+            if (hd) {
+              if (hd.top - cursor.bot < 12) fails.push(label + ' handle ' + (hd.top - cursor.bot));
+              cursor = hd;
+            }
+            if (sn) {
+              if (sn.top - cursor.bot < 12) fails.push(label + ' snip ' + (sn.top - cursor.bot));
+              cursor = sn;
+            }
+            const g3 = ft.top - cursor.bot;
+            if (g3 < 12) fails.push(label + ' foot ' + g3);
+            if (g3 > g1 + 90) fails.push(label + ' hole ' + Math.round(g3) + '/' + Math.round(g1));
+          }
+          try {
+            XA._isSample = false;
+            ['ko', 'en', 'ja'].forEach((lang) => {
+              XA.setLang(lang);
+              Object.keys(payload.chars).forEach((id) => {
+                const A = XA.analyze(XA.parseCSV(payload.chars[id]));
+                const m = XA.personaModel(A);
+                if (!m || m.blocked) { fails.push(lang + ' ' + id + ' blocked'); return; }
+                const card = XA.personaDraw(m);
+                inspect(lang + ' persona ' + id, card, 'persona');
+                if (lang === 'ko' && id === 'save' && !(card._fit && card._fit.namePx >= 96)) fails.push('short ko name px ' + (card._fit && card._fit.namePx));
+              });
+              const longM = XA.personaModel(XA.analyze(XA.parseCSV(payload.chars.save)));
+              longM.name = payload.longNames[lang].name;
+              longM.roast = payload.longNames[lang].roast;
+              longM.hideHandle = false;
+              longM.handle = 'very_long_example_name';
+              longM.hideSnippet = false;
+              longM.snippet = payload.longNames[lang].snip;
+              inspect(lang + ' long', XA.personaDraw(longM), 'persona');
+              inspect(lang + ' wide', XA.personaDraw(longM, { wide: true }), 'wide');
+              Object.keys(payload.grades).forEach((id) => {
+                const A = XA.analyze(XA.parseCSV(payload.grades[id]));
+                const m = XA.receiptModel(A);
+                if (!m || m.blocked) { fails.push(lang + ' receipt ' + id + ' blocked'); return; }
+                const paper = XA.receiptDraw(m);
+                inspect(lang + ' receipt ' + id, paper, 'receipt');
+                const rects = paper._layout || [];
+                const bar = span(rects, (r) => r.id === 'barcode');
+                const th = span(rects, (r) => r.id.indexOf('thanks') === 0);
+                const gr = span(rects, (r) => r.id.indexOf('grade-') === 0);
+                if (!bar || !th || !gr) fails.push(lang + ' receipt ' + id + ' missing');
+                else if (th.top - bar.bot < 12) fails.push(lang + ' receipt ' + id + ' barcode ' + (th.top - bar.bot));
+              });
+            });
+            XA._isSample = true;
+            const flagged = XA.personaModel(XA.analyze(XA.parseCSV(payload.chars.hit)));
+            inspect('sample flag', XA.personaDraw(flagged), 'persona');
+          } finally {
+            XA._isSample = prevSample;
+            XA.setLang(prevLang);
+          }
+          return fails;
+        }""", {'chars': layout_chars, 'grades': layout_grades, 'longNames': long_names})
+        check(overlaps == [], '그림 글자 상자가 겹치지 않음 ' + ' / '.join(overlaps[:6]))
         pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(80)
 
         pg.evaluate("XA.handleText('Post id,Date,Impressions\\n1979000000000000001,2026-01-02,10\\n', false)")

@@ -478,6 +478,39 @@
     g.stroke();
   }
 
+  function fontPx(g) {
+    const m = String(g.font).match(/(\d+(?:\.\d+)?)px/);
+    return m ? Number(m[1]) : 16;
+  }
+  function measureInk(g, text, emoji) {
+    const raw = String(text || '');
+    const probe = raw.trim() ? raw : 'Ag가';
+    const m = g.measureText(probe);
+    const size = fontPx(g);
+    let ascent = m.fontBoundingBoxAscent;
+    let descent = m.fontBoundingBoxDescent;
+    if (!(ascent > 0) || !(descent >= 0)) {
+      ascent = m.actualBoundingBoxAscent || 0;
+      descent = m.actualBoundingBoxDescent || 0;
+    }
+    if (!(ascent + descent >= size * 0.9)) {
+      ascent = size * 0.8;
+      descent = size * 0.25;
+    }
+    if (emoji) {
+      ascent = Math.max(ascent, size * 0.82);
+      descent = Math.max(descent, size * 0.3);
+    }
+    return { ascent: ascent, descent: descent, h: ascent + descent, w: g.measureText(raw).width };
+  }
+  function pushInk(layout, id, x, y, w, h) {
+    if (!(w > 0) || !(h > 0)) return;
+    layout.push({ id: id, x: x, y: y, w: w, h: h });
+  }
+  function centeredLines(g, text, maxW, limit) {
+    return wrapText(g, text, maxW).slice(0, limit || 3);
+  }
+
   XA.personaDraw = function (model, opt) {
     opt = opt || {};
     const wide = !!opt.wide;
@@ -486,126 +519,305 @@
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
+    const layout = [];
+    c._layout = layout;
     const color = model.color || '#15803d';
     paintCardBackdrop(g, W, H, color);
-    g.textAlign = 'center';
-    g.fillStyle = '#ffffff';
-    if (wide) {
-      g.font = '180px ' + EMOJI_FONT;
-      g.fillText(model.emoji || '', 210, 400);
-      g.font = '900 72px ' + FONT;
+    g.textBaseline = 'alphabetic';
+
+    function textLines(font, text, maxW, limit) {
+      g.font = font;
+      const lines = centeredLines(g, text, maxW, limit);
+      return { font: font, size: fontPx(g), lines: lines, metrics: lines.map((ln) => measureInk(g, ln, false)) };
+    }
+    function linesHeight(pack, inner) {
+      let h = 0;
+      pack.metrics.forEach((m, i) => { h += m.h; if (i) h += inner; });
+      return h;
+    }
+    function paintCenter(pack, top, inner, fill, id) {
+      g.font = pack.font;
+      g.textAlign = 'center';
+      g.fillStyle = fill;
+      let y = top;
+      pack.lines.forEach((ln, i) => {
+        if (i) y += inner;
+        const box = pack.metrics[i];
+        g.fillText(ln, W / 2, y + box.ascent);
+        pushInk(layout, id + '-' + i, W / 2 - box.w / 2, y, box.w, box.h);
+        y += box.h;
+      });
+    }
+    function paintLeft(pack, x, top, inner, fill, id) {
+      g.font = pack.font;
       g.textAlign = 'left';
-      g.fillText(model.name || '', 400, 150);
-      g.fillStyle = '#ffffff';
-      roundRect(g, 400, 190, 740, 110, 20);
-      g.fill();
-      g.fillStyle = '#1c1917';
-      g.font = '800 30px ' + FONT;
-      wrapText(g, model.roast || '', 700).slice(0, 2).forEach((ln, i) => g.fillText(ln, 424, 236 + i * 40));
-      g.fillStyle = '#ffffff';
-      g.font = '900 92px ' + FONT;
-      g.fillText(model.hitShow == null ? '—' : '×' + model.hitShow, 400, 420);
-      g.font = '700 24px ' + FONT;
-      wrapText(g, t('ps.weak.k') + ' · ' + (model.weakText || ''), 740).slice(0, 2).forEach((ln, i) => g.fillText(ln, 400, 480 + i * 30));
-      g.font = '700 22px ' + FONT;
-      g.fillText(t('ps.footer'), 400, 590);
-      return c;
+      g.fillStyle = fill;
+      let y = top;
+      pack.lines.forEach((ln, i) => {
+        if (i) y += inner;
+        const box = pack.metrics[i];
+        g.fillText(ln, x, y + box.ascent);
+        pushInk(layout, id + '-' + i, x, y, box.w, box.h);
+        y += box.h;
+      });
     }
-    let y = 70;
-    if (XA._isSample) {
-      g.font = '800 26px ' + FONT;
-      const label = t('ps.sample');
-      const tw = Math.min(W - 220, g.measureText(label).width + 36);
-      g.fillStyle = '#fde68a';
-      roundRect(g, (W - tw) / 2, y, tw, 40, 20);
-      g.fill();
-      g.fillStyle = '#78350f';
-      g.fillText(label, W / 2, y + 28);
-      y += 56;
-    }
-    y += 168;
-    g.font = '220px ' + EMOJI_FONT;
-    g.fillStyle = '#ffffff';
-    g.fillText(model.emoji || '', W / 2, y);
-    g.font = '900 96px ' + FONT;
-    const nameLines = wrapText(g, model.name || '', W - 180).slice(0, 2);
-    nameLines.forEach((ln) => { y += 104; g.fillText(ln, W / 2, y); });
-    y += 18;
-    g.font = '800 34px ' + FONT;
-    const roastLines = wrapText(g, model.roast || '', W - 240).slice(0, 3);
-    const boxH = 24 + roastLines.length * 46;
-    g.fillStyle = '#ffffff';
-    roundRect(g, 84, y, W - 168, boxH, 22);
-    g.fill();
-    g.fillStyle = '#1c1917';
-    roastLines.forEach((ln, i) => g.fillText(ln, W / 2, y + 44 + i * 46));
-    y += boxH + 32;
-    g.fillStyle = 'rgba(255,255,255,0.92)';
-    g.font = '600 24px ' + FONT;
-    g.fillText(model.play || '', W / 2, y);
-    y += 16;
-    g.fillStyle = '#ffffff';
-    g.font = '900 112px ' + FONT;
-    g.fillText(model.hitShow == null ? '—' : '×' + model.hitShow, W / 2, y + 100);
-    y += 118;
-    if (model.hitShow != null) {
-      g.font = '700 28px ' + FONT;
-      g.fillText(t('ps.hitLine', { n: model.hitShow }), W / 2, y);
-      y += 28;
-    }
-    const barStep = nameLines.length > 1 ? 46 : 52;
-    g.textAlign = 'left';
-    model.bars.forEach((b) => {
-      g.font = '800 26px ' + FONT;
-      g.fillStyle = '#ffffff';
-      if (b.bar == null) {
-        g.fillText(t(STAT_KEY[b.id]) + '   ' + t('ps.barMiss'), 96, y + 22);
-        y += barStep - 8;
-        return;
+
+    let emojiPx = wide ? 168 : 220;
+    let hitPx = wide ? 84 : 112;
+    let namePx = wide ? 64 : 96;
+    let roastPx = wide ? 28 : 34;
+    let barPx = 26;
+    let weakPx = wide ? 22 : 26;
+    let gapFloor = wide ? 12 : 18;
+
+    function build() {
+      const blocks = [];
+      const nameMax = wide ? 700 : W - 180;
+      const roastMax = wide ? 660 : W - 260;
+      const bodyMax = wide ? 700 : W - 200;
+      if (!wide && XA._isSample) {
+        const pack = textLines('800 26px ' + FONT, t('ps.sample'), W - 260, 1);
+        const padY = 10;
+        blocks.push({
+          id: 'sample', font: pack.size, h: pack.metrics[0].h + padY * 2,
+          draw: function (top) {
+            const box = pack.metrics[0];
+            const tw = Math.min(W - 220, box.w + 36);
+            g.fillStyle = '#fde68a';
+            roundRect(g, (W - tw) / 2, top, tw, box.h + padY * 2, 20);
+            g.fill();
+            paintCenter(pack, top + padY, 0, '#78350f', 'sample');
+          },
+        });
       }
-      g.fillText(t(STAT_KEY[b.id]), 96, y + 22);
-      g.textAlign = 'right';
-      g.font = '900 28px ' + FONT;
-      g.fillText(String(b.bar), W - 96, y + 22);
-      g.textAlign = 'left';
-      g.fillStyle = 'rgba(255,255,255,0.28)';
-      roundRect(g, 96, y + 32, W - 192, 14, 7);
-      g.fill();
-      g.fillStyle = '#ffffff';
-      roundRect(g, 96, y + 32, Math.max(14, (W - 192) * (b.bar / 99)), 14, 7);
-      g.fill();
-      y += barStep;
+      const emojiFont = emojiPx + 'px ' + EMOJI_FONT;
+      g.font = emojiFont;
+      const emojiText = model.emoji || '☺';
+      const emojiBox = measureInk(g, emojiText, true);
+      blocks.push({
+        id: 'emoji', font: emojiPx, h: emojiBox.h,
+        draw: function (top) {
+          g.font = emojiFont;
+          g.textAlign = 'center';
+          g.fillStyle = '#ffffff';
+          let cx = wide ? 190 : W / 2;
+          if (wide) cx = Math.min(cx, 340 - emojiBox.w / 2);
+          g.fillText(emojiText, cx, top + emojiBox.ascent);
+          pushInk(layout, 'emoji', cx - emojiBox.w / 2, top, emojiBox.w, emojiBox.h);
+        },
+      });
+      const namePack = textLines('900 ' + namePx + 'px ' + FONT, model.name || '', nameMax, 2);
+      const nameInner = 6;
+      blocks.push({
+        id: 'name', font: namePx, h: linesHeight(namePack, nameInner),
+        draw: function (top) {
+          if (wide) paintLeft(namePack, 400, top, nameInner, '#ffffff', 'name');
+          else paintCenter(namePack, top, nameInner, '#ffffff', 'name');
+        },
+      });
+      const roastPack = textLines('800 ' + roastPx + 'px ' + FONT, model.roast || '', roastMax, wide ? 2 : 3);
+      const roastInner = 6;
+      const roastPad = 16;
+      blocks.push({
+        id: 'roast', font: roastPx, h: linesHeight(roastPack, roastInner) + roastPad * 2,
+        draw: function (top) {
+          const h = linesHeight(roastPack, roastInner) + roastPad * 2;
+          g.fillStyle = '#ffffff';
+          if (wide) {
+            roundRect(g, 400, top, 740, h, 18);
+            g.fill();
+            paintLeft(roastPack, 424, top + roastPad, roastInner, '#1c1917', 'roast');
+          } else {
+            roundRect(g, 84, top, W - 168, h, 22);
+            g.fill();
+            paintCenter(roastPack, top + roastPad, roastInner, '#1c1917', 'roast');
+          }
+        },
+      });
+      if (!wide) {
+        const playPack = textLines('600 24px ' + FONT, model.play || '', bodyMax, 2);
+        blocks.push({
+          id: 'play', font: playPack.size, h: linesHeight(playPack, 4),
+          draw: function (top) { paintCenter(playPack, top, 4, 'rgba(255,255,255,0.92)', 'play'); },
+        });
+      }
+      const hitPack = textLines('900 ' + hitPx + 'px ' + FONT, model.hitShow == null ? '—' : ('×' + model.hitShow), nameMax, 1);
+      blocks.push({
+        id: 'hit', font: hitPx, h: linesHeight(hitPack, 0),
+        draw: function (top) {
+          if (wide) paintLeft(hitPack, 400, top, 0, '#ffffff', 'hit');
+          else paintCenter(hitPack, top, 0, '#ffffff', 'hit');
+        },
+      });
+      if (!wide && model.hitShow != null) {
+        const hitLinePack = textLines('700 28px ' + FONT, t('ps.hitLine', { n: model.hitShow }), bodyMax, 2);
+        blocks.push({
+          id: 'hitline', font: hitLinePack.size, h: linesHeight(hitLinePack, 4),
+          draw: function (top) { paintCenter(hitLinePack, top, 4, '#ffffff', 'hitline'); },
+        });
+      }
+      if (!wide) {
+        const labelSize = barPx;
+        const rows = (model.bars || []).map((b) => {
+          const label = b.bar == null ? (t(STAT_KEY[b.id]) + '  ' + t('ps.barMiss')) : t(STAT_KEY[b.id]);
+          const value = b.bar == null ? '' : String(b.bar);
+          let size = labelSize;
+          let lb;
+          let vb;
+          while (size >= 16) {
+            g.font = '800 ' + size + 'px ' + FONT;
+            lb = measureInk(g, label, false);
+            g.font = '900 ' + (size + 2) + 'px ' + FONT;
+            vb = value ? measureInk(g, value, false) : { ascent: 0, descent: 0, h: 0, w: 0 };
+            if (!value || lb.w + vb.w + 28 <= W - 192) break;
+            size -= 2;
+          }
+          const textH = Math.max(lb.h, vb.h || 0);
+          const trackH = 14;
+          const after = 8;
+          return { b: b, label: label, value: value, size: size, lb: lb, vb: vb, textH: textH, h: b.bar == null ? textH : textH + after + trackH };
+        });
+        const between = 10;
+        let barsH = 0;
+        rows.forEach((row, i) => { barsH += row.h; if (i) barsH += between; });
+        blocks.push({
+          id: 'bars', font: barPx, h: barsH,
+          draw: function (top) {
+            let y = top;
+            rows.forEach((row, i) => {
+              if (i) y += between;
+              g.font = '800 ' + row.size + 'px ' + FONT;
+              g.textAlign = 'left';
+              g.fillStyle = '#ffffff';
+              g.fillText(row.label, 96, y + row.lb.ascent);
+              pushInk(layout, 'bar-' + row.b.id + '-l', 96, y, row.lb.w, row.lb.h);
+              if (row.value) {
+                g.font = '900 ' + (row.size + 2) + 'px ' + FONT;
+                g.textAlign = 'right';
+                g.fillText(row.value, W - 96, y + row.vb.ascent);
+                pushInk(layout, 'bar-' + row.b.id + '-r', W - 96 - row.vb.w, y, row.vb.w, row.vb.h);
+              }
+              if (row.b.bar != null) {
+                const ty = y + row.textH + 8;
+                g.fillStyle = 'rgba(255,255,255,0.28)';
+                roundRect(g, 96, ty, W - 192, 14, 7);
+                g.fill();
+                g.fillStyle = '#ffffff';
+                roundRect(g, 96, ty, Math.max(14, (W - 192) * (row.b.bar / 99)), 14, 7);
+                g.fill();
+                pushInk(layout, 'bar-' + row.b.id + '-track', 96, ty, W - 192, 14);
+              }
+              y += row.h;
+            });
+          },
+        });
+      }
+      const weakPack = textLines('700 ' + weakPx + 'px ' + FONT, t('ps.weak.k') + ' · ' + (model.weakText || ''), wide ? 680 : W - 260, 2);
+      const weakInner = 4;
+      const weakPad = 14;
+      blocks.push({
+        id: 'weak', font: weakPx, h: linesHeight(weakPack, weakInner) + weakPad * 2,
+        draw: function (top) {
+          const h = linesHeight(weakPack, weakInner) + weakPad * 2;
+          g.fillStyle = 'rgba(0,0,0,0.22)';
+          if (wide) {
+            roundRect(g, 400, top, 740, h, 14);
+            g.fill();
+            paintLeft(weakPack, 424, top + weakPad, weakInner, '#ffffff', 'weak');
+          } else {
+            roundRect(g, 84, top, W - 168, h, 16);
+            g.fill();
+            paintCenter(weakPack, top + weakPad, weakInner, '#ffffff', 'weak');
+          }
+        },
+      });
+      if (!wide && !model.hideHandle && model.handle) {
+        const pack = textLines('700 26px ' + FONT, '@' + model.handle, bodyMax, 2);
+        blocks.push({
+          id: 'handle', font: pack.size, h: linesHeight(pack, 4),
+          draw: function (top) { paintCenter(pack, top, 4, '#ffffff', 'handle'); },
+        });
+      }
+      if (!wide && !model.hideSnippet && model.snippet) {
+        const pack = textLines('500 24px ' + FONT, model.snippet, bodyMax, 2);
+        blocks.push({
+          id: 'snip', font: pack.size, h: linesHeight(pack, 4),
+          draw: function (top) { paintCenter(pack, top, 4, 'rgba(255,255,255,0.92)', 'snip'); },
+        });
+      }
+      const footBits = [textLines(wide ? '700 22px ' + FONT : '800 26px ' + FONT, t('ps.footer'), bodyMax, 2)];
+      if (!wide) {
+        const meta = (model.period ? (model.period.from === model.period.to ? model.period.from : t('ps.period', model.period)) : t('ps.noDate')) + '  ·  ' + t('ps.count', { n: fmtInt(model.n) });
+        footBits.push(textLines('600 22px ' + FONT, meta, bodyMax, 2));
+        footBits.push(textLines('700 24px ' + FONT, 'tuki0609.github.io/account-compass', bodyMax, 1));
+      }
+      const footInner = 8;
+      let footH = 0;
+      footBits.forEach((p, i) => { footH += linesHeight(p, 4); if (i) footH += footInner; });
+      blocks.push({
+        id: 'footer', font: wide ? 22 : 26, h: footH,
+        draw: function (top) {
+          let y = top;
+          footBits.forEach((p, i) => {
+            if (i) y += footInner;
+            if (wide) paintLeft(p, 400, y, 4, '#ffffff', 'foot' + i);
+            else paintCenter(p, y, 4, '#ffffff', 'foot' + i);
+            y += linesHeight(p, 4);
+          });
+        },
+      });
+      return blocks;
+    }
+
+    function stack(blocks, emojiAside) {
+      const flow = emojiAside ? blocks.filter((b) => b.id !== 'emoji') : blocks;
+      const gaps = [];
+      let used = 0;
+      flow.forEach((b, i) => {
+        used += b.h;
+        if (!i) return;
+        const gpx = Math.max(gapFloor, 0.12 * Math.max(flow[i - 1].font, b.font));
+        gaps.push(gpx);
+        used += gpx;
+      });
+      return { flow: flow, gaps: gaps, used: used };
+    }
+
+    let blocks = build();
+    const top0 = wide ? 36 : 52;
+    const bot0 = wide ? 28 : 44;
+    const avail = H - top0 - bot0;
+    let guard = 0;
+    while (stack(blocks, wide).used > avail && guard < 48) {
+      guard += 1;
+      if (hitPx > (wide ? 64 : 96)) hitPx -= 4;
+      else if (roastPx > (wide ? 24 : 30)) roastPx -= 2;
+      else if (emojiPx > (wide ? 140 : 188)) emojiPx -= 8;
+      else if (weakPx > 20) weakPx -= 2;
+      else if (barPx > 20) barPx -= 2;
+      else if (emojiPx > (wide ? 112 : 140)) emojiPx -= 8;
+      else if (hitPx > (wide ? 56 : 72)) hitPx -= 4;
+      else if (gapFloor > 12) gapFloor -= 2;
+      else if (namePx > (wide ? 44 : 80)) namePx -= 4;
+      else break;
+      blocks = build();
+    }
+    const packed = stack(blocks, wide);
+    const slack = Math.max(0, avail - packed.used);
+    const extra = packed.gaps.length ? slack / packed.gaps.length : 0;
+    let y = top0;
+    packed.flow.forEach((b, i) => {
+      b.draw(y);
+      y += b.h;
+      if (i < packed.gaps.length) y += packed.gaps[i] + extra;
     });
-    y += 12;
-    g.textAlign = 'center';
-    const weak = t('ps.weak.k') + ' · ' + (model.weakText || '');
-    g.font = '700 26px ' + FONT;
-    const wlines = wrapText(g, weak, W - 240).slice(0, 2);
-    const wH = 18 + wlines.length * 34;
-    g.fillStyle = 'rgba(0,0,0,0.22)';
-    roundRect(g, 84, y, W - 168, wH, 16);
-    g.fill();
-    g.fillStyle = '#ffffff';
-    wlines.forEach((ln, i) => g.fillText(ln, W / 2, y + 32 + i * 34));
-    y += wH + 8;
-    if (!model.hideHandle && model.handle) {
-      g.font = '700 26px ' + FONT;
-      g.fillText('@' + model.handle, W / 2, y + 28);
-      y += 36;
+    if (wide) {
+      const emoji = blocks.filter((b) => b.id === 'emoji')[0];
+      const mid = top0 + (y - top0) / 2;
+      const et = Math.max(top0, Math.min(H - bot0 - emoji.h, mid - emoji.h / 2));
+      emoji.draw(et);
     }
-    if (!model.hideSnippet && model.snippet) {
-      g.font = '500 24px ' + FONT;
-      g.fillText(model.snippet, W / 2, y + 28);
-    }
-    const footY = Math.max(y + 48, H - 118);
-    g.font = '800 26px ' + FONT;
-    g.fillStyle = '#ffffff';
-    g.fillText(t('ps.footer'), W / 2, Math.min(footY, H - 118));
-    const meta = (model.period ? (model.period.from === model.period.to ? model.period.from : t('ps.period', model.period)) : t('ps.noDate')) + '  ·  ' + t('ps.count', { n: fmtInt(model.n) });
-    g.font = '600 22px ' + FONT;
-    g.fillText(meta, W / 2, H - 76);
-    g.font = '700 24px ' + FONT;
-    g.fillText('tuki0609.github.io/account-compass', W / 2, H - 40);
+    c._fit = { namePx: namePx, emojiPx: emojiPx, hitPx: hitPx };
     return c;
   };
 
