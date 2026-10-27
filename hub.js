@@ -99,8 +99,8 @@
         if (strip) strip.classList.add('need');
       }
     }
-    const blocks = CATS.map((cat) => {
-      const list = modules.filter((m) => m.category === cat.id);
+    const blocks = CATS.filter((cat) => cat.id !== 'soon').map((cat) => {
+      const list = modules.filter((m) => m.category === cat.id && m.status !== 'soon');
       if (!list.length) return '';
       const cards = list.map((mod) => {
         const st = XA.cardStatus(mod, A);
@@ -121,7 +121,11 @@
       }).join('');
       return `<section class="hub-cat" data-cat="${esc(cat.id)}"><h2>${esc(t(cat.titleKey))}</h2><div class="hub-grid">${cards}</div></section>`;
     }).join('');
-    board.innerHTML = blocks;
+    const soon = modules.filter((m) => m.status === 'soon');
+    const soonLine = soon.length
+      ? `<p class="soon-line" id="soon-line">${esc(t('hub.cat.soon'))}: ${soon.map((m) => esc(t(m.titleKey))).join(' · ')} · ${esc(t('hub.state.soon'))}</p>`
+      : '';
+    board.innerHTML = blocks + soonLine;
     board.querySelectorAll('.hub-card:not(:disabled)').forEach((btn) => {
       btn.addEventListener('click', () => {
         const mod = XA.moduleById(btn.dataset.mod);
@@ -159,6 +163,23 @@
     empty.hidden = !!(XA.last && (XA.last.posts || XA.last.days));
   };
 
+  const TAB_ORDER = ['persona', 'receipt', 'weather', 'compass'];
+  XA.mountCardTabs = function (active) {
+    const bar = document.getElementById('card-tabs');
+    if (!bar) return;
+    const buttons = TAB_ORDER.map((id) => {
+      const mod = XA.moduleById(id);
+      if (!mod || mod.status === 'soon') return '';
+      const on = id === active;
+      return `<button type="button" class="card-tab${on ? ' on' : ''}" data-tab-card="${esc(id)}" aria-pressed="${on ? 'true' : 'false'}">${esc(t(mod.titleKey))}</button>`;
+    }).join('');
+    bar.hidden = !buttons;
+    bar.innerHTML = buttons;
+    bar.querySelectorAll('[data-tab-card]').forEach((btn) => {
+      btn.addEventListener('click', () => XA.openCard(btn.dataset.tabCard));
+    });
+  };
+
   XA.openCard = function (id) {
     const mod = XA.moduleById(id);
     if (!mod || mod.status === 'soon') return false;
@@ -183,9 +204,17 @@
       if (typeof mod.render === 'function') mod.render(dyn, XA.last || null);
     }
     const back = document.getElementById('back-home');
+    XA.mountCardTabs(id);
     if (back) back.focus();
     window.scrollTo({ top: 0 });
     return true;
+  };
+
+  XA.openResult = function () {
+    const A = XA.last;
+    if (!A) return false;
+    if (A.mode === 'overview') return XA.openCard('compass');
+    return XA.openCard('persona');
   };
 
   XA.closeCard = function () {
@@ -199,6 +228,7 @@
 
   XA.syncHub = function () {
     XA.mountHome();
+    if (XA._openCard) XA.mountCardTabs(XA._openCard);
     if (XA._openCard === 'compass') XA.syncCompassEmpty();
     if (XA._openCard && XA._openCard !== 'compass') {
       const mod = XA.moduleById(XA._openCard);
@@ -252,7 +282,7 @@
 
   XA.registerModule({
     id: 'soon-calendar',
-    order: 4,
+    order: 5,
     category: 'soon',
     status: 'soon',
     icon: '🗓️',
@@ -263,7 +293,7 @@
   });
   XA.registerModule({
     id: 'soon-hooks',
-    order: 5,
+    order: 6,
     category: 'soon',
     status: 'soon',
     icon: '✍️',

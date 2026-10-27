@@ -479,7 +479,7 @@
   if (XA.registerModule) {
     XA.registerModule({
       id: 'weather',
-      order: 2,
+      order: 3,
       category: 'fun',
       status: 'ready',
       icon: '⛅',

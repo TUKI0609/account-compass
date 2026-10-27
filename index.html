@@ -51,15 +51,12 @@
   <!-- 홈: CSV 한 번, 카드 여러 장 -->
   <section id="tab-csv" class="panel active">
     <div id="home">
-      <div class="hero home-lead"><h1 data-i18n="hero.h1"></h1></div>
-      <div id="hub-board"></div>
-      <div id="drop" class="csv-strip" tabindex="0">
-        <div class="csv-actions">
-          <button type="button" id="csv-pick" class="btn" data-i18n="drop.title">CSV 올리기</button>
-          <button id="btn-sample" class="btn ghost" data-sample="sample.csv" data-i18n="btn.sample"></button>
-          <button id="btn-sample-ov" class="btn ghost" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
-        </div>
+      <div id="drop" class="csv-hero" tabindex="0">
+        <button type="button" id="csv-pick" class="btn csv-big" data-i18n="drop.title">CSV 올리기</button>
+        <button type="button" id="btn-sample" class="btn csv-example" data-sample="sample.csv" data-i18n="btn.sample"></button>
+        <a id="csv-how" class="csv-how" href="#" data-goto="help" data-i18n="home.how30">CSV 받는 법 30초</a>
         <p class="csv-note" data-i18n="drop.sub"></p>
+        <button type="button" id="btn-sample-ov" class="csv-ov" data-sample="sample_overview.csv" data-i18n="btn.sampleOv"></button>
         <div class="beginner">
           <a class="beginner-cta" href="#" data-goto="help" data-i18n="home.howto">처음이에요? 사용법 보기</a>
           <a class="beginner-cta alt" href="#" data-goto="diag" data-i18n="home.diag">무료 · 복붙 진단 (Premium 없이)</a>
@@ -70,10 +67,12 @@
         <div id="csv-error" class="alert" hidden></div>
         <input type="file" id="file" accept=".csv,text/csv,text/plain" hidden>
       </div>
+      <div id="hub-board"></div>
     </div>
 
     <div id="card-view" hidden>
       <button type="button" class="btn ghost back-home" id="back-home" data-i18n="hub.back">← 홈으로</button>
+      <div id="card-tabs" class="card-tabs" role="tablist" hidden></div>
       <div id="card-compass" data-card="compass" hidden>
         <div id="compass-empty" class="card"><p data-i18n="compass.empty"></p></div>
         <div id="overview" hidden></div>
@@ -420,5 +419,7 @@
 <script src="hub.js"></script>
 <script src="weather.js"></script>
 <script src="receipt.js"></script>
+<script src="share.js"></script>
+<script src="persona.js"></script>
 </body>
 </html>

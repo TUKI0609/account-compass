@@ -1,7 +1,7 @@
-/* 내 X 영수증.
-   올린 CSV에 있는 칸만 더해서 영수증처럼 보여 준다.
-   없는 칸은 0으로 채우지 않고 빠졌다고 말한다.
-   그림은 canvas로 이 브라우저에서만 만든다. */
+/* 내 X 영수증: 팔로워 1명 얼마?
+   줄은 노출 합 ÷ 그 칸의 합이다. 단위가 다른 수를 더하지 않는다.
+   나누는 쪽이 0이면 품절. 없는 칸은 0으로 채우지 않는다.
+   등급 기준은 XA.PRICE 한곳에만 있다. */
 (function () {
   'use strict';
   const XA = (window.XA = window.XA || {});
@@ -9,17 +9,36 @@
   const esc = (s) => (XA.esc ? XA.esc(s) : String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const FONT = '"WenQuanYi Micro Hei","Droid Sans Fallback","Apple SD Gothic Neo","Noto Sans CJK KR",sans-serif';
   const LINES = [
-    { key: 'imp', label: 'rc.line.imp', unit: 'rc.unit.imp' },
-    { key: 'likes', label: 'rc.line.likes', unit: 'rc.unit.likes' },
-    { key: 'rt', label: 'rc.line.rt', unit: 'rc.unit.rt' },
-    { key: 'rep', label: 'rc.line.rep', unit: 'rc.unit.rep' },
-    { key: 'bm', label: 'rc.line.bm', unit: 'rc.unit.bm' },
-    { key: 'prof', label: 'rc.line.prof', unit: 'rc.unit.prof' },
-    { key: 'nf', label: 'rc.line.nf', unit: 'rc.unit.nf' },
+    { key: 'nf', label: 'rc.line.nf' },
+    { key: 'likes', label: 'rc.line.likes' },
+    { key: 'bm', label: 'rc.line.bm' },
+    { key: 'rep', label: 'rc.line.rep' },
+    { key: 'prof', label: 'rc.line.prof' },
   ];
+  const GRADE_NAME = {
+    luxury: 'rc.grade.luxury', value: 'rc.grade.value', window: 'rc.grade.window', save: 'rc.grade.save',
+    taste: 'rc.grade.taste', first: 'rc.grade.first', gap: 'rc.grade.gap',
+  };
+  const GRADE_LINE = {
+    luxury: 'rc.gradeLine.luxury', value: 'rc.gradeLine.value', window: 'rc.gradeLine.window', save: 'rc.gradeLine.save',
+    taste: 'rc.gradeLine.taste', first: 'rc.gradeLine.first', gap: 'rc.gradeLine.gap',
+  };
+  const P = {
+    MIN_POSTS: 10,
+    LUXURY: 5000,
+    VALUE: 800,
+    WINDOW_VISIT: 300,
+    WINDOW_CONV: 0.05,
+    SAVE_MULT: 2,
+    TASTE: 300,
+    EXP_MIN_IMP: 500,
+    EXP_MIN_NF: 1,
+    COUPON_MIN: 3,
+  };
+  XA.PRICE = P;
 
   function pad(n) { return String(n).padStart(2, '0'); }
-  function fmtQty(n) {
+  function fmtInt(n) {
     const v = Math.round(Number(n) || 0);
     try { return v.toLocaleString(XA.locale ? XA.locale() : 'ko-KR'); } catch (e) { return String(v); }
   }
@@ -54,14 +73,31 @@
     if (chars.length <= 32) return clean;
     return chars.slice(0, 32).join('') + '…';
   }
-  function bars(n) {
-    const s = String(Math.abs(Math.round(Number(n) || 0))).padStart(12, '0').slice(-12);
-    return s.split('').map((ch) => (Number(ch) % 3) + 1);
+  function hourFromId(p) {
+    if (!p || !XA.timeFromId) return null;
+    const ms = XA.timeFromId(String(p.id || ''));
+    if (ms == null) return null;
+    return new Date(ms + 9 * 3600e3).getUTCHours();
   }
-
   function rowsOf(A) {
     if (!A) return [];
     return A.mode === 'overview' ? (A.days || []) : (A.posts || []);
+  }
+  function sumKey(rows, key) { return rows.reduce((s, r) => s + (Number(r[key]) || 0), 0); }
+
+  function pickGrade(n, prices, conv) {
+    if (n < P.MIN_POSTS) return 'first';
+    const fp = prices.nf;
+    if (fp != null && fp >= P.LUXURY) return 'luxury';
+    if (fp != null && fp <= P.VALUE) return 'value';
+    const vp = prices.prof;
+    if (vp != null && vp <= P.WINDOW_VISIT && conv != null && conv < P.WINDOW_CONV) return 'window';
+    const bp = prices.bm;
+    const lp = prices.likes;
+    if (bp != null && lp != null && bp < lp * P.SAVE_MULT) return 'save';
+    const rp = prices.rep;
+    if (rp != null && rp <= P.TASTE) return 'taste';
+    return 'gap';
   }
 
   XA.receiptModel = function (A, opts) {
@@ -72,19 +108,26 @@
     const rows = rowsOf(A);
     if (!rows.length) return { blocked: true, key: 'rc.why.empty' };
     if (A.map.imp == null) return { blocked: true, key: 'rc.why.noImp' };
+    const imp = sumKey(rows, 'imp');
     const present = LINES.filter((L) => A.map[L.key] != null);
     const missing = LINES.filter((L) => A.map[L.key] == null).map((L) => L.key);
+    const prices = {};
     const lines = present.map((L) => {
-      const qty = rows.reduce((s, r) => s + (Number(r[L.key]) || 0), 0);
-      return { key: L.key, label: t(L.label), unit: t(L.unit), qty: qty };
+      const qty = sumKey(rows, L.key);
+      if (!(qty > 0)) {
+        prices[L.key] = null;
+        return { key: L.key, label: t(L.label), sold: true, qty: qty, imp: imp };
+      }
+      const raw = imp / qty;
+      prices[L.key] = raw;
+      return { key: L.key, label: t(L.label), sold: false, qty: qty, imp: imp, raw: raw, rounded: Math.round(raw) };
     });
-    const total = lines.reduce((s, l) => s + l.qty, 0);
+    const conv = (A.map.prof != null && A.map.nf != null && sumKey(rows, 'prof') > 0) ? sumKey(rows, 'nf') / sumKey(rows, 'prof') : null;
+    const n = rows.length;
+    const grade = pickGrade(n, prices, conv);
 
     const dayKeys = [];
-    rows.forEach((r) => {
-      const key = rowDayKey(A, r);
-      if (key != null) dayKeys.push(key);
-    });
+    rows.forEach((r) => { const key = rowDayKey(A, r); if (key != null) dayKeys.push(key); });
     const period = dayKeys.length ? { from: ymd(Math.min.apply(null, dayKeys)), to: ymd(Math.max.apply(null, dayKeys)) } : null;
 
     let handle = '';
@@ -99,80 +142,107 @@
       counts.forEach((c, h) => { if (c > bestN) { handle = h; bestN = c; } });
     }
 
-    let bestDay = null;
-    if (A.map.imp != null) {
+    let expensive = null;
+    let cheap = null;
+    if (A.mode !== 'overview' && A.map.nf != null) {
+      rows.forEach((p, i) => {
+        const nf = Number(p.nf) || 0;
+        const pimp = Number(p.imp) || 0;
+        if (nf < P.EXP_MIN_NF || pimp < P.EXP_MIN_IMP) return;
+        const day = rowDayKey(A, p);
+        if (day == null) return;
+        const raw = pimp / nf;
+        const item = { day: day, date: ymd(day), raw: raw, rounded: Math.round(raw), i: p.i == null ? i : p.i, snippet: firstLine(p.text) };
+        const earlier = !expensive || item.raw > expensive.raw || (item.raw === expensive.raw && (item.day < expensive.day || (item.day === expensive.day && item.i < expensive.i)));
+        if (earlier) expensive = item;
+        const cheaper = !cheap || item.raw < cheap.raw || (item.raw === cheap.raw && (item.day < cheap.day || (item.day === cheap.day && item.i < cheap.i)));
+        if (cheaper) cheap = item;
+      });
+    }
+
+    let coupon = null;
+    if (A.mode !== 'overview' && rows.length && imp > 0) {
       const by = new Map();
-      rows.forEach((r) => {
-        const key = rowDayKey(A, r);
-        if (key == null) return;
-        by.set(key, (by.get(key) || 0) + (Number(r.imp) || 0));
-      });
-      by.forEach((qty, key) => {
-        if (!bestDay || qty > bestDay.qty || (qty === bestDay.qty && key < bestDay.key)) bestDay = { key: key, qty: qty, label: ymd(key) };
-      });
-    }
-
-    let busiest = null;
-    if (A.mode !== 'overview') {
-      const by = new Map();
+      let timedImp = 0;
+      let timedN = 0;
       rows.forEach((p) => {
-        if (p.hour == null) return;
-        by.set(p.hour, (by.get(p.hour) || 0) + 1);
+        const h = hourFromId(p);
+        if (h == null) return;
+        const pimp = Number(p.imp) || 0;
+        const cur = by.get(h) || { n: 0, imp: 0 };
+        cur.n += 1; cur.imp += pimp;
+        by.set(h, cur);
+        timedN += 1; timedImp += pimp;
       });
-      by.forEach((n, h) => {
-        if (!busiest || n > busiest.n || (n === busiest.n && h < busiest.hour)) busiest = { hour: h, n: n };
+      const overall = rows.length ? imp / rows.length : 0;
+      let best = null;
+      by.forEach((cur, h) => {
+        if (cur.n < P.COUPON_MIN) return;
+        const avg = cur.imp / cur.n;
+        const pct = overall > 0 ? Math.round((avg / overall - 1) * 100) : 0;
+        if (pct <= 0) return;
+        if (!best || pct > best.pct || (pct === best.pct && h < best.hour)) best = { hour: h, pct: pct, avg: avg, n: cur.n };
       });
+      if (best) coupon = { hour: best.hour, pct: best.pct, avg: best.avg, overall: overall, n: best.n, timed: timedN, timedImp: timedImp };
     }
 
-    let snippet = '';
-    let snippetPost = null;
-    if (A.mode !== 'overview' && A.map.text != null) {
-      rows.forEach((p) => {
-        const line = firstLine(p.text);
-        if (!line) return;
-        const score = A.map.imp != null ? (Number(p.imp) || 0) : (Number(p.likes) || 0);
-        const idx = p.i == null ? 0 : p.i;
-        if (!snippetPost || score > snippetPost.score || (score === snippetPost.score && idx < snippetPost.idx)) {
-          snippetPost = { score: score, idx: idx, line: line };
-        }
-      });
-      if (snippetPost) snippet = snippetPost.line;
+    let refund = null;
+    const ov = XA.lastOverview;
+    if (ov && ov.map && ov.map.unf != null && (ov.days || []).length) {
+      refund = { qty: sumKey(ov.days, 'unf') };
     }
 
-    const pool = [];
-    if (bestDay) pool.push({ id: 'day', qty: bestDay.qty, text: t('rc.note.day', { day: bestDay.label, n: fmtQty(bestDay.qty) }) });
-    if (busiest) pool.push({ id: 'hour', qty: busiest.n, text: t('rc.note.hour', { h: String(busiest.hour), n: fmtQty(busiest.n) }) });
-    if (snippet && !hideSnippet) pool.push({ id: 'line', text: t('rc.note.line', { line: snippet }) });
-    let notes = [];
-    if (snippet && !hideSnippet) {
-      const lineNote = pool.find((n) => n.id === 'line');
-      const other = pool.find((n) => n.id !== 'line');
-      if (other) notes.push(other);
-      if (lineNote) notes.push(lineNote);
-    } else notes = pool.filter((n) => n.id !== 'line').slice(0, 2);
-    if (!notes.length) notes = [{ id: 'plain', text: t('rc.note.plain') }];
-
+    const nfPresent = A.map.nf != null;
+    const nfQty = nfPresent ? sumKey(rows, 'nf') : null;
+    const headlineKind = !nfPresent ? 'miss' : (prices.nf == null ? 'sold' : 'price');
+    const show = headlineKind === 'price' ? Math.round(prices.nf) : null;
     return {
       lines: lines,
       missing: missing,
       missingLabels: missing.map((k) => t('col.' + k)),
-      total: total,
+      prices: prices,
+      conv: conv,
+      grade: grade,
+      headline: show,
       period: period,
       handle: handle,
       hideHandle: hideHandle,
       hideSnippet: hideSnippet,
-      snippet: snippet,
-      bestDay: bestDay,
-      busiest: busiest,
-      notes: notes,
-      n: rows.length,
+      expensive: expensive,
+      cheap: cheap,
+      coupon: coupon,
+      refund: refund,
+      nfQty: nfQty,
+      headlineKind: headlineKind,
+      imp: imp,
+      n: n,
       mode: A.mode === 'overview' ? 'overview' : 'content',
-      bars: bars(total),
+      showPrice: show,
     };
   };
+  function modelHit(raw) { return raw == null ? null : Math.round(raw); }
 
-  function blockedHTML(st) {
-    return `<div class="card rc-wrap"><h2>${esc(t('hub.card.receipt.t'))}</h2><p>${esc(t(st.key, st.params))}</p></div>`;
+  XA.priceCaption = function (model, lang) {
+    lang = lang || (XA.lang || 'ko');
+    const url = XA.siteUrl ? XA.siteUrl({ c: 'price', lang: lang }) : 'https://tuki0609.github.io/account-compass/?c=price&lang=' + lang;
+    const dict = (XA.I18N && XA.I18N[lang]) || {};
+    const num = model.headlineKind === 'price' ? fmtInt(model.headline) : (model.headlineKind === 'miss' ? '—' : (dict['rc.sold'] || ''));
+    if (lang === 'en') return 'One follower cost me ' + num + ' impressions 🧾 What\'s yours?\n' + url;
+    if (lang === 'ja') return 'フォロワー1人の値段は表示' + num + '回でした 🧾 あなたはいくら？\n' + url;
+    return '제 팔로워 1명 값은 노출 ' + num + '회였습니다 🧾 당신은 얼마?\n' + url;
+  };
+
+  function lineHTML(l) {
+    if (l.sold) {
+      return `<div class="rc-line" data-key="${esc(l.key)}" data-sold="1" data-num="${Math.round(l.qty)}" data-imp="${Math.round(l.imp)}"><span>${esc(l.label)}</span><span class="sold">${esc(t('rc.sold'))}</span></div>`;
+    }
+    return `<div class="rc-line" data-key="${esc(l.key)}" data-qty="${l.rounded}" data-raw="${l.raw}" data-num="${Math.round(l.qty)}" data-imp="${Math.round(l.imp)}"><span>${esc(l.label)}</span><span><b>${esc(fmtInt(l.rounded))}</b> <span class="u">${esc(t('rc.unit'))}</span></span></div>`;
+  }
+
+  function postHTML(item, kind) {
+    if (!item) return '';
+    const snip = item.snippet && !XA._rcHideSnippetWait ? '' : '';
+    return `<p class="rc-post" id="rc-${kind}" data-date="${esc(item.date)}" data-raw="${item.raw}" data-qty="${item.rounded}">${esc(t(kind === 'exp' ? 'rc.exp' : 'rc.cheap', { day: item.date, n: fmtInt(item.rounded) }))}</p>`;
   }
 
   function paperHTML(model) {
@@ -184,32 +254,39 @@
       ? esc(model.period.from === model.period.to ? model.period.from : t('rc.period', model.period))
       : esc(t('rc.noDate'));
     const periodAttrs = model.period ? ` data-from="${esc(model.period.from)}" data-to="${esc(model.period.to)}"` : '';
-    const basis = esc(t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtQty(model.n) }));
+    const basis = esc(t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtInt(model.n) }));
     const flag = XA._isSample ? `<p class="rc-flag">${esc(t('rc.sample'))}</p>` : '';
-    const lines = model.lines.map((l) => `<div class="rc-line" data-key="${esc(l.key)}" data-qty="${Math.round(l.qty)}"><span>${esc(l.label)}</span><span><b>${esc(fmtQty(l.qty))}</b> <span class="u">${esc(l.unit)}</span></span></div>`).join('');
-    const notes = model.notes.map((n) => `<p class="rc-note" data-note="${esc(n.id)}"${n.qty != null ? ` data-qty="${Math.round(n.qty)}"` : ''}>${esc(n.text)}</p>`).join('');
-    const miss = model.missingLabels.length
-      ? `<p class="rc-miss" id="rc-miss">${esc(t('rc.missing', { cols: model.missingLabels.join(', ') }))}</p>`
-      : '';
-    const bar = model.bars.map((w) => `<i style="width:${w * 3}px"></i>`).join('');
-    return `<div class="rc-paper" id="rc-paper">
+    const gradeName = esc(t(GRADE_NAME[model.grade]));
+    const gradeLine = esc(t(GRADE_LINE[model.grade]));
+    const headline = model.headlineKind === 'miss'
+      ? esc(t('rc.headlineMiss'))
+      : (model.headline == null ? esc(t('rc.headlineSold')) : esc(t('rc.headline', { n: fmtInt(model.headline) })));
+    const lines = model.lines.map(lineHTML).join('');
+    const hideSnip = model.hideSnippet;
+    const exp = model.expensive ? `<p class="rc-post" id="rc-exp" data-date="${esc(model.expensive.date)}" data-raw="${model.expensive.raw}" data-qty="${model.expensive.rounded}">${esc(t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }))}${(!hideSnip && model.expensive.snippet) ? ' ' + esc(model.expensive.snippet) : ''}</p>` : '';
+    const cheap = model.cheap ? `<p class="rc-post" id="rc-cheap" data-date="${esc(model.cheap.date)}" data-raw="${model.cheap.raw}" data-qty="${model.cheap.rounded}">${esc(t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }))}${(!hideSnip && model.cheap.snippet) ? ' ' + esc(model.cheap.snippet) : ''}</p>` : '';
+    const refund = model.refund ? `<div class="rc-line" id="rc-refund" data-key="unf" data-qty="${Math.round(model.refund.qty)}"><span>${esc(t('rc.refund'))}</span><b>${esc(fmtInt(model.refund.qty))}</b></div>` : '';
+    const coupon = model.coupon ? `<p class="rc-coupon" id="rc-coupon" data-hour="${model.coupon.hour}" data-pct="${model.coupon.pct}">${esc(t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }))}</p>` : '';
+    const sum = model.nfQty == null ? '' : `<div class="rc-line rc-sum" id="rc-sum" data-nf="${Math.round(model.nfQty)}" data-imp="${Math.round(model.imp)}"><span>${esc(t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }))}</span></div>`;
+    const miss = model.missingLabels.length ? `<p class="rc-miss" id="rc-miss">${esc(t('rc.missing', { cols: model.missingLabels.join(', ') }))}</p>` : '';
+    return `<div class="rc-paper" id="rc-paper" data-grade="${esc(model.grade)}">
       ${flag}
       <div class="rc-star">${star}</div>
+      <p class="rc-grade" id="rc-grade">${esc(t('rc.guest'))} ${gradeName}</p>
+      <p class="rc-grade-line">${gradeLine}</p>
+      <p class="rc-headline" id="rc-headline" data-kind="${esc(model.headlineKind)}"${model.headline == null ? '' : ` data-price="${model.headline}"`}>${headline}</p>
       <p class="rc-sub" id="rc-handle">${handleLine}</p>
       <p class="rc-sub" id="rc-period"${periodAttrs}>${periodLine}</p>
       <p class="rc-sub">${basis}</p>
       <hr class="rc-rule">
       ${lines}
+      ${exp}${cheap}${refund}${coupon}
       <hr class="rc-rule">
-      <div class="rc-line rc-total" data-key="total" data-qty="${Math.round(model.total)}"><span>${esc(t('rc.total'))}</span><b>${esc(fmtQty(model.total))}</b></div>
-      <p class="rc-sub">${esc(t('rc.totalHint'))}</p>
-      <hr class="rc-rule">
-      <div id="rc-note">${notes}</div>
+      ${sum}
       ${miss}
-      <div class="rc-bars" aria-hidden="true">${bar}</div>
       <p class="rc-thanks">${esc(t('rc.thanks'))}</p>
       <p class="rc-site">${esc(t('brand.name'))} · tuki0609.github.io/account-compass</p>
-    </div><p class="rc-honest">${esc(t('rc.honest'))}</p>`;
+    </div>`;
   }
 
   function wrapText(g, text, maxW) {
@@ -225,89 +302,71 @@
 
   XA.receiptDraw = function (model) {
     const W = 1080;
-    const lineH = 54;
-    const noteLines = [];
-    const missLines = [];
-    const c0 = document.createElement('canvas');
-    const g0 = c0.getContext('2d');
-    g0.font = '400 32px ' + FONT;
-    model.notes.forEach((n) => wrapText(g0, n.text, W - 160).forEach((ln) => noteLines.push(ln)));
-    if (model.missingLabels.length) {
-      g0.font = '400 28px ' + FONT;
-      wrapText(g0, t('rc.missing', { cols: model.missingLabels.join(', ') }), W - 160).forEach((ln) => missLines.push(ln));
-    }
-    const H = 220 + model.lines.length * lineH + 80 + noteLines.length * 44 + missLines.length * 40 + 280;
+    const H = 1350;
     const c = document.createElement('canvas');
-    c.width = W; c.height = Math.max(H, 1350);
+    c.width = W; c.height = H;
     const g = c.getContext('2d');
     g.fillStyle = '#efe7d6';
-    g.fillRect(0, 0, c.width, c.height);
+    g.fillRect(0, 0, W, H);
     g.fillStyle = '#f7f3ea';
-    g.fillRect(70, 48, W - 140, c.height - 96);
+    g.fillRect(70, 48, W - 140, H - 96);
     g.fillStyle = '#1c1917';
     g.textAlign = 'center';
-    g.font = '800 54px ' + FONT;
-    let y = 140;
+    g.font = '800 48px ' + FONT;
+    let y = 130;
     g.fillText(t('rc.star'), W / 2, y);
-    g.font = '600 32px ' + FONT;
-    y += 58;
+    g.font = '800 40px ' + FONT;
+    y += 64;
+    g.fillText(t('rc.guest') + ' ' + t(GRADE_NAME[model.grade]), W / 2, y);
+    g.font = '600 30px ' + FONT;
+    y += 48;
+    wrapText(g, t(GRADE_LINE[model.grade]), W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 40; });
+    g.font = '800 34px ' + FONT;
+    const head = model.headlineKind === 'miss' ? t('rc.headlineMiss') : (model.headline == null ? t('rc.headlineSold') : t('rc.headline', { n: fmtInt(model.headline) }));
+    wrapText(g, head, W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 44; });
+    g.font = '600 28px ' + FONT;
     const handleLine = !model.handle ? t('rc.noHandle') : (model.hideHandle ? t('rc.handleHidden') : '@' + model.handle);
-    g.fillText(handleLine, W / 2, y);
-    y += 46;
+    g.fillText(handleLine, W / 2, y + 8);
+    y += 44;
     g.fillText(model.period ? (model.period.from === model.period.to ? model.period.from : t('rc.period', model.period)) : t('rc.noDate'), W / 2, y);
-    y += 46;
-    g.fillText(t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtQty(model.n) }), W / 2, y);
     y += 36;
     g.strokeStyle = '#44403c';
     g.setLineDash([8, 8]);
     g.beginPath(); g.moveTo(120, y); g.lineTo(W - 120, y); g.stroke();
     g.setLineDash([]);
-    y += 64;
+    y += 56;
     g.textAlign = 'left';
-    g.font = '600 36px ' + FONT;
+    g.font = '600 32px ' + FONT;
     model.lines.forEach((l) => {
       g.fillText(l.label, 120, y);
-      const right = fmtQty(l.qty) + '  ' + l.unit;
       g.textAlign = 'right';
-      g.fillText(right, W - 120, y);
+      g.fillText(l.sold ? t('rc.sold') : (fmtInt(l.rounded) + '  ' + t('rc.unit')), W - 120, y);
       g.textAlign = 'left';
-      y += lineH;
+      y += 48;
     });
+    g.font = '500 28px ' + FONT;
+    if (model.expensive) { y += 8; g.fillText(t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }), 120, y); y += 40; }
+    if (model.cheap) { g.fillText(t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }), 120, y); y += 40; }
+    if (!model.hideSnippet && model.expensive && model.expensive.snippet) { g.fillText(model.expensive.snippet, 120, y); y += 36; }
+    if (model.refund) { g.fillText(t('rc.refund') + '  ' + fmtInt(model.refund.qty), 120, y); y += 40; }
+    if (model.coupon) { g.fillText(t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }), 120, y); y += 40; }
     y += 8;
     g.setLineDash([8, 8]);
     g.beginPath(); g.moveTo(120, y); g.lineTo(W - 120, y); g.stroke();
     g.setLineDash([]);
-    y += 64;
-    g.font = '800 42px ' + FONT;
-    g.fillText(t('rc.total'), 120, y);
-    g.textAlign = 'right';
-    g.fillText(fmtQty(model.total), W - 120, y);
-    g.textAlign = 'left';
     y += 48;
-    g.font = '400 28px ' + FONT;
-    g.fillText(t('rc.totalHint'), 120, y);
-    y += 56;
-    g.font = '400 32px ' + FONT;
-    noteLines.forEach((ln) => { g.fillText(ln, 120, y); y += 44; });
-    if (missLines.length) {
-      y += 8;
-      g.font = '400 28px ' + FONT;
-      missLines.forEach((ln) => { g.fillText(ln, 120, y); y += 40; });
+    g.font = '800 32px ' + FONT;
+    if (model.nfQty != null) g.fillText(t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }), 120, y);
+    if (model.missingLabels.length) {
+      y += 40;
+      g.font = '400 26px ' + FONT;
+      wrapText(g, t('rc.missing', { cols: model.missingLabels.join(', ') }), W - 200).forEach((ln) => { g.fillText(ln, 120, y); y += 34; });
     }
-    y += 16;
-    let x = 120;
-    model.bars.forEach((w) => {
-      const bw = w * 10;
-      g.fillRect(x, y, bw, 70);
-      x += bw + 8;
-    });
-    y += 120;
     g.textAlign = 'center';
-    g.font = '800 40px ' + FONT;
-    g.fillText(t('rc.thanks'), W / 2, y);
-    y += 48;
+    g.font = '800 36px ' + FONT;
+    g.fillText(t('rc.thanks'), W / 2, H - 110);
     g.font = '700 26px ' + FONT;
-    g.fillText(t('brand.name') + '  ·  tuki0609.github.io/account-compass', W / 2, Math.min(y, c.height - 70));
+    g.fillText(t('brand.name') + '  ·  tuki0609.github.io/account-compass', W / 2, H - 60);
     return c;
   };
 
@@ -317,26 +376,36 @@
       hideHandle: !!XA._rcHideHandle,
     };
   }
-
+  function say(note, key) {
+    if (!note) return;
+    note.hidden = false;
+    note.textContent = t(key);
+  }
   function render(el, A) {
     const mod = XA.moduleById('receipt');
     const st = XA.cardStatus(mod, A);
     if (!A || st.state !== 'ready') {
-      el.innerHTML = blockedHTML(st.state === 'ready' ? { key: 'rc.why.empty' } : st);
+      el.innerHTML = `<div class="card rc-wrap"><h2>${esc(t('hub.card.receipt.t'))}</h2><p>${esc(t(st.key, st.params))}</p></div>`;
       return;
     }
     const model = XA.receiptModel(A, prefs());
     if (!model || model.blocked) {
-      el.innerHTML = blockedHTML(model || { key: 'rc.why.empty' });
+      el.innerHTML = `<div class="card rc-wrap"><h2>${esc(t('hub.card.receipt.t'))}</h2><p>${esc(t((model && model.key) || 'rc.why.empty'))}</p></div>`;
       return;
     }
     el.innerHTML = `<div class="rc-wrap">
+      ${paperHTML(model)}
       <div class="rc-tools">
         <label><input type="checkbox" id="rc-hide-line" ${model.hideSnippet ? 'checked' : ''}> ${esc(t('rc.hideLine'))}</label>
         <label><input type="checkbox" id="rc-hide-handle" ${model.hideHandle ? 'checked' : ''}> ${esc(t('rc.hideHandle'))}</label>
       </div>
-      ${paperHTML(model)}
-      <div class="row gap wrap-row" style="margin-top:10px"><button type="button" class="btn" id="rc-save">${esc(t('rc.save'))}</button></div>
+      <p class="rc-honest">${esc(t('rc.honest'))}</p>
+      <div class="share-row">
+        <button type="button" class="btn" id="rc-save">${esc(t('share.save'))}</button>
+        <button type="button" class="btn ghost" id="rc-copy">${esc(t('share.copy'))}</button>
+        <button type="button" class="btn ghost" id="rc-x">${esc(t('share.x'))}</button>
+      </div>
+      <p class="share-note" id="rc-share-note" hidden></p>
       <p class="rc-honest">${esc(t('rc.saveNote'))}</p>
     </div>`;
     const redraw = () => {
@@ -346,15 +415,19 @@
     };
     document.getElementById('rc-hide-line').addEventListener('change', redraw);
     document.getElementById('rc-hide-handle').addEventListener('change', redraw);
-    document.getElementById('rc-save').addEventListener('click', () => {
-      const live = XA.receiptModel(A, prefs());
-      const canvas = XA.receiptDraw(live);
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'x-receipt.png';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+    const live = () => XA.receiptModel(A, prefs());
+    document.getElementById('rc-save').addEventListener('click', () => XA.downloadCanvas(XA.receiptDraw(live()), 'x-receipt.png'));
+    document.getElementById('rc-copy').addEventListener('click', () => {
+      const note = document.getElementById('rc-share-note');
+      XA.copyCanvas(XA.receiptDraw(live()), 'x-receipt.png').then((r) => say(note, r.how === 'clipboard' ? 'share.copied' : 'share.copyFallback'));
+    });
+    document.getElementById('rc-x').addEventListener('click', () => {
+      const note = document.getElementById('rc-share-note');
+      const m = live();
+      XA.shareToX(XA.receiptDraw(m), XA.priceCaption(m, XA.lang || 'ko'), 'x-receipt.png').then((r) => {
+        if (r.how === 'intent') say(note, 'share.paste');
+        else if (r.how === 'share') say(note, 'share.shared');
+      });
     });
   }
 
@@ -368,7 +441,7 @@
   if (XA.registerModule) {
     XA.registerModule({
       id: 'receipt',
-      order: 3,
+      order: 4,
       category: 'fun',
       status: 'ready',
       icon: '🧾',

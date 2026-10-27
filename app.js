@@ -824,7 +824,7 @@
   function handleText(text, isSample) {
     showErr(null);
     try {
-      const A = analyze(parseCSV(text)); XA.last = A; XA._isSample = isSample; XA.includeReplies = false;
+      const A = analyze(parseCSV(text)); XA.last = A; XA._isSample = isSample; XA.includeReplies = false; XA._psIncludeReplies = false;
       if (A.mode === 'overview') {
         XA.lastOverview = A; XA.lastOverviewSample = !!isSample;
         $('#results').hidden = true; XA.renderOverview(A, isSample);
@@ -833,6 +833,7 @@
         const o = $('#overview'); if (o) o.hidden = true; render(A, isSample);
       }
       if (XA.syncHub) XA.syncHub();
+      if (XA.openResult) XA.openResult();
     }
     catch (e) { console.warn(e); showErr(e); }
   }
