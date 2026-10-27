@@ -1,4 +1,4 @@
-# 계정 나침반 · Account Compass (v2)
+# 계정 나침반 · Account Compass (v2.4)
 
 X(구 트위터) 애널리틱스 CSV를 **브라우저 안에서만** 분석하는 무료 정적 웹 도구입니다. 서버·DB·AI·X API·CDN·쿠키·분석 도구가 없습니다.
 X(구 트위터)와 무관한 비공식 도구입니다. / Unofficial tool, not affiliated with X (formerly Twitter).
@@ -6,21 +6,26 @@ X(구 트위터)와 무관한 비공식 도구입니다. / Unofficial tool, not 
 제작자(credit): tuki(툭이) @Ty_Tuki0609 — https://x.com/Ty_Tuki0609
 
 ## 기능
-- **CSV 분석**: 게시물별(콘텐츠) CSV → 이번 주 할 일 3개, 새 팔로우가 글에서 온 비율(개요 CSV를 같이 올렸을 때), 요약, 맞는 사람 찾기(X 검색 링크만, 요청 없음), 답글 대상 순위, 방향 제안, 카테고리 표, 훅 키워드, 시리즈 아이디어, TOP/BOTTOM 5, 요일×시간 히트맵. 일별 개요(Overview) CSV를 올리면 자동으로 개요 모드.
-  모든 비교는 **올린 사람 자신의 평균** 기준입니다 (특정 계정의 수치를 기준으로 쓰지 않음). 검색 링크의 `min_faves`도 그 파일의 좋아요 중앙값에서 잡고, 5 미만은 5, 100 초과는 100으로만 자릅니다.
+- **홈**: 처음 열면 카드가 먼저 보입니다. 넓은 화면에서는 한 줄에 2~3장, 좁은 화면에서는 1~2장입니다. 소개는 한 줄이고, CSV는 카드 아래의 얇은 줄(CSV 올리기 / 예시로 해보기)입니다. 파일은 한 번만 읽고 모든 카드가 같이 씁니다. 파일이 없을 때 카드를 누르면, 그 자리에서 올리거나 예시로 해보는 안내가 나옵니다. 읽히면 `CSV 불러옴 ✓ (파일 이름)`이 보이고, 카드마다 이 파일로 열 수 있는지도 표시됩니다. 칸이 없으면 짧은 이유로 막히고, 없는 숫자를 만들지 않습니다. 「준비 중」 카드 3장은 회색이고 눌러도 열리지 않습니다.
+- **1. 계정 나침반**: 기존 분석. 처음에는 이번 주 할 일 3개만 보이고, 팔로우 비율·맞는 사람·답글 대상·요약·제안·카테고리·순위·히트맵은 버튼을 눌러 하나씩 엽니다. 일별 개요 CSV는 이 카드 안에서 개요로 열립니다.
+- **2. 말투 날씨 예보**: 내 글의 글자 수·기호·이모지·시간만으로 날씨 비유를 만듭니다. 기온·습도·바람·강수 옆에는 실제로 센 숫자가 있습니다. 심리 분석이나 감정 AI가 아니라는 안내가 있습니다. 공유 그림은 브라우저 안에서만 만들고, 올리지 않습니다. 본문 칸이 없으면 예보를 만들지 않습니다.
 - **복붙 진단**: 글을 붙여 넣으면 100점 체크리스트 (프리미엄 없이 누구나). CSV를 먼저 올렸다면 그 데이터의 시간대·평균과 비교, 아니면 일반적인 경험칙.
 - **사용법**: 인라인 SVG 예시 그림으로 단계별 안내 (X 화면·로고를 복제하지 않은 일반적인 그림).
-- **한국어 / English / 日本語** 전환 (헤더 한가운데 分段 버튼, localStorage `xa-lang`에 저장, `<html lang>` 변경). 기본 한국어.
+- **한국어 / English / 日本語** 전환. 버튼은 홈을 포함한 모든 화면의 헤더에 있습니다. 고른 언어는 `localStorage`의 `xa-lang`에 남아서 홈과 카드를 오가도 유지되고, 홈에서 바꾸면 그 자리에서 문구가 바뀝니다. CSV는 다시 읽지 않습니다. 기본 한국어.
 - **개인정보·이용 안내**: `privacy.html`.
+
+계정 나침반 숫자는 모두 **올린 사람 자신의 글**과 비교합니다. 검색 링크의 `min_faves`도 그 파일의 좋아요 중앙값에서 잡고, 5 미만은 5, 100 초과는 100으로만 자릅니다. 맞는 사람 찾기는 X 검색 주소만 만들고, 이 페이지가 X에 요청을 보내지는 않습니다.
 
 ## 파일
 | 파일 | 설명 |
 |---|---|
-| index.html | 화면 (탭 3개: CSV 분석 / 복붙 진단 / 사용법) |
-| privacy.html | 개인정보·이용 안내 (ko/en) |
-| style.css | 디자인 (모바일 대응) |
+| index.html | 화면 (홈 / 복붙 진단 / 사용법). 홈 안에 카드 모음 |
+| privacy.html | 개인정보·이용 안내 (ko/en/ja) |
+| style.css | 디자인 (모바일 대응, 가로 360px) |
 | i18n.js | 번역 사전 `XA.I18N` + `XA.t()` / `XA.setLang()` |
 | app.js | CSV 파서·헤더 매칭·분류·통계·히트맵·제안 |
+| hub.js | 홈 카드 등록·열기·돌아가기. 새 카드는 여기 한 번 |
+| weather.js | 말투 날씨 예보 (글자 세기 + 브라우저 안 그림) |
 | overview.js | 일별 개요 CSV 분석 |
 | diag.js | 복붙 진단 |
 | samples.js | 샘플 CSV 2개를 문자열로 내장 (file:// 에서도 동작하도록, fetch 없음) |
@@ -32,6 +37,9 @@ X(구 트위터)와 무관한 비공식 도구입니다. / Unofficial tool, not 
 ```bash
 cd x-analyzer && python3 -m http.server 8000   # http://localhost:8000
 ```
+
+## 카드 하나 더 넣기
+`hub.js`의 `XA.registerModule({...})` 한 번이면 홈에 카드가 생깁니다. `id`, `order`(번호), `category`(`analyze` / `fun` / `soon`), `status`(`ready` 또는 `soon`), `icon`, `titleKey`, `descKey`, `needsKey`가 필요합니다. 본문이 필요하면 `requires: ['text']`. `status: 'soon'` 이면 회색으로만 보이고 열리지 않습니다. 실제로 열 카드는 `render(el, A)`에서 그립니다. `A`는 홈에서 이미 읽은 CSV입니다. 제목·설명·「준비 중」·돌아가기·칸이 없을 때의 이유는 `i18n.js`의 ko/en/ja에 같은 키로 넣습니다.
 
 ## 언어 추가 (예: 일본어)
 `i18n.js`에 `ja: { _name:'日本語', _short:'JA', _locale:'ja-JP', ... }` 블록을 추가하고 `ko`와 같은 키를 모두 채우면 토글 버튼이 자동으로 생깁니다. 빠진 키는 한국어로 대체되고, `tools/test.py`가 ko↔en 키 일치를 검사합니다(ja도 같은 방식으로 검사 추가 가능).
@@ -52,7 +60,7 @@ cd x-analyzer && python3 -m http.server 8000   # http://localhost:8000
 - X가 2026년 10월에 요금제 이름을 바꿨기 때문에 표기·조건이 다를 수 있습니다. 안 열리면 프로필 메뉴에서 애널리틱스를 찾으세요.
 
 ## 배포 (빌드 없음 — 폴더 그대로 올리기)
-배포에 필요한 파일: `index.html privacy.html style.css i18n.js app.js overview.js diag.js samples.js sample.csv sample_overview.csv` (tools/·screenshots/ 불필요)
+배포에 필요한 파일: `index.html privacy.html style.css i18n.js app.js hub.js weather.js overview.js diag.js samples.js sample.csv sample_overview.csv` (tools/·screenshots/ 불필요)
 
 **GitHub Pages**
 1. 새 저장소에 위 파일을 올림 → Settings → Pages → Source: Deploy from a branch → `main` / `(root)`.
