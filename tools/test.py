@@ -425,26 +425,78 @@ def persona_expect(posts, present, C, include_replies=False):
         'steady': None if active is None else to_bar(active, C['BAR_STEADY']),
         'magnet': None if not has('nf') else to_bar(per1k, C['BAR_MAGNET']),
     }
-    return {'id': cid, 'n': len(rows), 'imp': imp_sum, 'hit': hit, 'hitShow': hit_show_py(hit), 'scores': scores, 'bars': bars, 'save': save, 'active': active, 'per1k': per1k, 'dawn': dawn}
+    weak_cands = []
+    if conv is not None and prof_sum:
+        weak_cands.append((min(1, conv / 0.2), 0, 'conv', conv))
+    if save is not None:
+        weak_cands.append((min(1, save), 1, 'save', save))
+    if chat is not None:
+        weak_cands.append((min(1, chat / 1.5), 2, 'chat', chat))
+    if per1k is not None:
+        weak_cands.append((min(1, per1k / 10), 3, 'magnet', per1k))
+    if active is not None:
+        weak_cands.append((min(1, active), 4, 'steady', active))
+    shown = hit_show_py(hit)
+    if hit is not None and shown is not None:
+        weak_cands.append((min(1, hit / 40), 5, 'hit', hit))
+    weak_cands.sort()
+    weak_id, weak_raw = ('none', None) if not weak_cands else (weak_cands[0][2], weak_cands[0][3])
+    return {'id': cid, 'n': len(rows), 'imp': imp_sum, 'hit': hit, 'hitShow': shown, 'scores': scores, 'bars': bars, 'save': save, 'active': active, 'per1k': per1k, 'dawn': dawn, 'weak': weak_id, 'weakRaw': weak_raw}
+
+def grade_distance(gid, prices, conv, P):
+    if gid == 'luxury':
+        fp = prices.get('nf')
+        if fp is None:
+            return None
+        if fp >= P['LUXURY']:
+            return 0
+        return (P['LUXURY'] - fp) / P['LUXURY']
+    if gid == 'value':
+        fp = prices.get('nf')
+        if fp is None:
+            return None
+        if fp <= P['VALUE']:
+            return 0
+        return (fp - P['VALUE']) / P['VALUE']
+    if gid == 'window':
+        vp = prices.get('prof')
+        if vp is None or conv is None:
+            return None
+        visit_ok = vp <= P['WINDOW_VISIT']
+        conv_ok = conv < P['WINDOW_CONV']
+        if visit_ok and conv_ok:
+            return 0
+        d_visit = 0 if visit_ok else max((vp - P['WINDOW_VISIT']) / P['WINDOW_VISIT'], 1e-9)
+        d_conv = 0 if conv_ok else max((conv - P['WINDOW_CONV']) / P['WINDOW_CONV'], 1e-9)
+        return max(d_visit, d_conv)
+    if gid == 'save':
+        bp, lp = prices.get('bm'), prices.get('likes')
+        if bp is None or lp is None or not (lp > 0):
+            return None
+        line = lp * P['SAVE_MULT']
+        if bp < line:
+            return 0
+        return max((bp - line) / line, 1e-9)
+    if gid == 'taste':
+        rp = prices.get('rep')
+        if rp is None:
+            return None
+        if rp <= P['TASTE']:
+            return 0
+        return max((rp - P['TASTE']) / P['TASTE'], 1e-9)
+    return None
 
 def pick_grade(n, prices, conv, P):
     if n < P['MIN_POSTS']:
         return 'first'
-    fp = prices.get('nf')
-    if fp is not None and fp >= P['LUXURY']:
-        return 'luxury'
-    if fp is not None and fp <= P['VALUE']:
-        return 'value'
-    vp = prices.get('prof')
-    if vp is not None and vp <= P['WINDOW_VISIT'] and conv is not None and conv < P['WINDOW_CONV']:
-        return 'window'
-    bp, lp = prices.get('bm'), prices.get('likes')
-    if bp is not None and lp is not None and bp < lp * P['SAVE_MULT']:
-        return 'save'
-    rp = prices.get('rep')
-    if rp is not None and rp <= P['TASTE']:
-        return 'taste'
-    return 'gap'
+    best, best_d = None, float('inf')
+    for gid in ('luxury', 'value', 'window', 'save', 'taste'):
+        d = grade_distance(gid, prices, conv, P)
+        if d is None or d != d or d == float('inf'):
+            continue
+        if d < best_d:
+            best, best_d = gid, d
+    return best or 'value'
 
 def price_expect(posts, present, P):
     imp = sum_key(posts, 'imp')
@@ -669,7 +721,7 @@ try:
         PC = pg.evaluate('XA.PERSONA')
         sample_posts, sample_present = parse_post_csv(open(os.path.join(ROOT, 'sample.csv'), encoding='utf-8').read())
         pexp = persona_expect(sample_posts, sample_present, PC)
-        check(pg.get_attribute('#ps-card', 'data-id') == pexp['id'], f"예시 부캐 {pg.get_attribute('#ps-card', 'data-id')} vs {pexp['id']}")
+        check(pg.get_attribute('#ps-card', 'data-id') == pexp['id'] == 'hit' and pexp['hit'] is not None and pexp['hit'] >= 30, f"예시 부캐 {pg.get_attribute('#ps-card', 'data-id')} vs {pexp['id']} 한 방 {pexp['hit']}")
         check(pg.get_attribute('#ps-card', 'data-n') == str(pexp['n']) and pg.get_attribute('#ps-card', 'data-imp') == str(js_round(pexp['imp'])), f"예시 부캐 글·노출 {pexp['n']} {pexp['imp']}")
         check(pg.get_attribute('#ps-hit', 'data-show') == pexp['hitShow'], f"한 방 지수 {pg.get_attribute('#ps-hit', 'data-show')} vs {pexp['hitShow']}")
         for stat, bar in pexp['bars'].items():
@@ -682,6 +734,14 @@ try:
         check(pg.get_attribute('#ps-why', 'open') is None and '왜 이렇게 나왔나요?' in pg.inner_text('#ps-why'), '왜 이렇게 나왔나나는 카드 아래, 접혀 있음')
         check('내 데이터 기준' in pg.inner_text('#ps-card') and '남과 비교한 순위 아님' in pg.inner_text('#ps-card') and 'tuki0609.github.io/account-compass' in pg.inner_text('#ps-card'), '부캐 하단 문구')
         check('놀이예요' in pg.inner_text('#ps-card'), '놀이 안내')
+        dup = pg.evaluate("""() => {
+          const em = (document.querySelector('.ps-emoji') || {}).textContent || '';
+          const name = (document.querySelector('.ps-name') || {}).textContent || '';
+          return { em: em.trim(), name, dup: name.includes(em.trim()) && em.trim() !== '' };
+        }""")
+        check(dup['em'] and not dup['dup'] and pg.locator('.ps-emoji').count() == 1, f"이모지는 이름 밖에 한 번 {dup}")
+        weak_raw = pg.get_attribute('#ps-weak', 'data-raw')
+        check(pg.get_attribute('#ps-weak', 'data-weak') == pexp['weak'] and '약점' in pg.inner_text('#ps-weak') and abs(float(weak_raw) - pexp['weakRaw']) < 1e-4, f"약점 {pg.get_attribute('#ps-weak', 'data-weak')} {weak_raw} vs {pexp['weak']} {pexp['weakRaw']}")
         pg.screenshot(path=f'{SHOT}/v2_30_persona_ko.png')
         pg.screenshot(path=f'{SHOT}/v2_34_example_ko.png')
         for tab in ('receipt', 'weather', 'compass', 'persona'):
@@ -934,7 +994,9 @@ try:
             hideLine: document.getElementById('rc-hide-line').checked, hideHandle: document.getElementById('rc-hide-handle').checked,
             sample: !!paper.querySelector('.rc-flag') };
         }""")
-        check(rc['grade'] == rex['grade'] and rc['kind'] == 'price' and int(rc['price']) == rex['headline'], f"예시 등급 {rc['grade']} {rex['grade']} 가격 {rc['price']} {rex['headline']}")
+        check(rc['grade'] == rex['grade'] == 'value' and rc['kind'] == 'price' and int(rc['price']) == rex['headline'], f"예시 등급 {rc['grade']} {rex['grade']} 가격 {rc['price']} {rex['headline']}")
+        check('등급 사이' not in rc['paper'] and '여섯 등급' not in rc['paper'] and '가성비' in rc['paper'], '영수증은 가성비 한 등급이고 사이 문구가 없음')
+        check(pg.get_attribute('#rc-barcode', 'data-seed') == str(int(rex['imp'])), '바코드 씨앗은 노출 합')
         check('total' not in rc['lines'] and 'imp' not in rc['lines'] and rc['refund'] is None, f"단위가 다른 합계·환불 줄 없음 {list(rc['lines'])}")
         for key, line in rex['lines'].items():
             got = rc['lines'].get(key)
@@ -963,11 +1025,11 @@ try:
         pg.screenshot(path=f'{SHOT}/v2_25_receipt_ko.png')
         pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
         enp = pg.inner_text('#rc-paper')
-        check(not HANGUL.search(enp) and 'MY X RECEIPT' in enp and 'THANK YOU FOR POSTING' in enp and 'glances' not in enp and pg.get_attribute('#rc-paper [data-key="likes"]', 'data-qty') == str(rex['lines']['likes']['qty']), f'영수증 EN {HANGUL.findall(enp)[:4]}')
+        check(not HANGUL.search(enp) and 'MY X RECEIPT' in enp and 'THANK YOU FOR POSTING' in enp and 'glances' not in enp and 'Between grades' not in enp and pg.get_attribute('#rc-paper [data-key="likes"]', 'data-qty') == str(rex['lines']['likes']['qty']), f'영수증 EN {HANGUL.findall(enp)[:4]}')
         pg.screenshot(path=f'{SHOT}/v2_26_receipt_en.png')
         pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
         jap = pg.inner_text('#rc-paper')
-        check(not HANGUL.search(jap) and 'レシート' in jap and 'すれ違い' not in jap and pg.get_attribute('#rc-paper [data-key="nf"]', 'data-qty') == str(rex['lines']['nf']['qty']), f'영수증 JA {HANGUL.findall(jap)[:4]}')
+        check(not HANGUL.search(jap) and 'レシート' in jap and 'すれ違い' not in jap and 'グレードのあいだ' not in jap and pg.get_attribute('#rc-paper [data-key="nf"]', 'data-qty') == str(rex['lines']['nf']['qty']), f'영수증 JA {HANGUL.findall(jap)[:4]}')
         pg.screenshot(path=f'{SHOT}/v2_27_receipt_ja.png')
         pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
         caps = pg.evaluate("""() => { const m = XA.receiptModel(XA.last); return { ko: XA.priceCaption(m,'ko'), en: XA.priceCaption(m,'en'), ja: XA.priceCaption(m,'ja') }; }""")
@@ -980,8 +1042,8 @@ try:
         png = open(di.value.path(), 'rb').read()
         rw, rh = struct.unpack('>II', png[16:24])
         drawn = '\n'.join(pg.evaluate('window.__rcTexts'))
-        check(png[:8] == b'\x89PNG\r\n\x1a\n' and rw == 1080 and rh == 1350, f'영수증 PNG {rw}x{rh}')
-        check('@' + SAMPLE_RC['handle'] in drawn and (not snip or snip not in drawn) and '번 스침' not in drawn, '그림에 계정은 있고 가린 첫 줄·옛 합계 단위는 없음')
+        check(png[:8] == b'\x89PNG\r\n\x1a\n' and rw == 1080 and 780 <= rh < 1350, f'영수증 PNG {rw}x{rh}')
+        check('@' + SAMPLE_RC['handle'] in drawn and (not snip or snip not in drawn) and '번 스침' not in drawn and '등급 사이' not in drawn and '가성비' in drawn and '올려 주셔서 고마워요' in drawn, '그림에 계정·가성비·감사 문구가 있고 가린 첫 줄·옛 합계·등급 사이는 없음')
         open(f'{SHOT}/v2_25b_receipt_png.png', 'wb').write(png)
         pg.evaluate('window.__rcTexts = []')
         pg.check('#rc-hide-handle'); pg.wait_for_timeout(40)
@@ -1090,8 +1152,9 @@ try:
         assert_price('구경꾼', posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 21, 'likes': 100})), 'window')
         assert_price('저장창고', posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'likes': 100, 'bm': 200})), 'save')
         assert_price('시식', posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'bm': 4, 'rep': 100})), 'taste')
-        assert_price('등급 사이', posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'bm': 4, 'rep': 4})), 'gap')
-        zero = assert_price('팔로워 0', posts_csv(build_posts(12, spread=True, length=100, imp=100, likes=10, bm=1, rep=0, prof=0, nf=0)), 'gap')
+        near = assert_price('가장 가까운 등급', posts_csv(build_posts(12, **{**common, 'imp': 2000, 'prof': 2, 'bm': 4, 'rep': 4})), 'save')
+        check('등급 사이' not in near.get('paper', '') and '여섯' not in near.get('paper', ''), '어느 칸에도 안 맞으면 가장 가까운 등급 이름')
+        zero = assert_price('팔로워 0', posts_csv(build_posts(12, spread=True, length=100, imp=100, likes=10, bm=1, rep=0, prof=0, nf=0)), 'save')
         check(zero['lines']['nf']['sold'] == '1' and '품절' in zero['paper'] and 'Infinity' not in zero['paper'], '0으로 나누지 않고 품절')
         miss_cols = [c for c in ['Post id','Date','Post text','Post Link','Impressions','Likes','Reposts','Replies','Bookmarks','Profile visits','URL Clicks']]
         miss = assert_price('새 팔로우 칸 없음', posts_csv(build_posts(12, **common), miss_cols), 'taste')

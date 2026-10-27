@@ -184,21 +184,25 @@ h2,#results,#overview,#card-view,#home{scroll-margin-top:96px}
 .ps-wrap{max-width:440px;margin:0 auto;width:100%}
 .ps-tools,.rc-tools{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0;font-size:13px}
 .ps-tools label{display:flex;gap:6px;align-items:flex-start;font-weight:700}
-.ps-visual{border-radius:18px;padding:16px 14px 12px;color:#fff}
+.ps-visual{position:relative;border-radius:28px;padding:12px;color:#fff;overflow:hidden;background:radial-gradient(circle at 18% 0%,rgba(255,255,255,.38),transparent 46%),linear-gradient(165deg,color-mix(in srgb,var(--ps) 58%,#fff) 0%,var(--ps) 48%,color-mix(in srgb,var(--ps) 58%,#000) 100%);box-shadow:0 12px 28px rgba(15,23,42,.18)}
+.ps-visual::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.28) 1.2px,transparent 1.3px);background-size:14px 14px;pointer-events:none}
+.ps-inner{position:relative;z-index:1;border:2px solid rgba(255,255,255,.62);background:rgba(255,255,255,.14);border-radius:22px;padding:14px 12px 12px;text-align:center}
 .ps-flag{display:inline-block;margin:0 0 6px;background:#fde68a;color:#78350f;font-weight:800;font-size:12px;border-radius:99px;padding:2px 8px}
-.ps-emoji{font-size:40px;margin:0;line-height:1}
-.ps-name{font-size:28px;line-height:1.2;margin:4px 0;font-weight:800;color:#fff}
-.ps-roast{margin:6px 0 0;font-size:15px;font-weight:700;line-height:1.4}
-.ps-play{margin:4px 0 8px;font-size:12.5px;opacity:.92}
-.ps-kicker{margin:8px 0 0;font-size:13px;font-weight:800}
-.ps-hit{font-size:42px;font-weight:800;letter-spacing:-.03em;margin:0;line-height:1.1}
-.ps-hitline{margin:4px 0 8px;font-weight:700}
-.ps-stats{display:grid;gap:6px;margin:8px 0}
-.ps-stat{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;font-size:13px;font-weight:800}
-.ps-stat b{font-size:16px}
-.ps-bar{grid-column:1 / -1;height:8px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden}
+.ps-emoji{font-size:92px;margin:0;line-height:1}
+.ps-name{font-size:40px;line-height:1.05;margin:6px 0 8px;font-weight:900;color:#fff;letter-spacing:-.03em}
+.ps-roastbox{background:#fff;color:#1c1917;border-radius:16px;padding:10px 12px;margin:0 0 8px;box-shadow:0 5px 0 rgba(0,0,0,.12)}
+.ps-roast{margin:0;font-size:16px;font-weight:900;line-height:1.35}
+.ps-play{margin:0 0 4px;font-size:12px;opacity:.92}
+.ps-kicker{margin:4px 0 0;font-size:13px;font-weight:800}
+.ps-hit{font-size:64px;font-weight:900;letter-spacing:-.04em;margin:0;line-height:.95}
+.ps-hitline{margin:2px 0 8px;font-weight:800;font-size:14px}
+.ps-stats{display:grid;gap:7px;margin:8px 0;text-align:left}
+.ps-stat{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;font-size:13px;font-weight:800}
+.ps-stat b{font-size:18px}
+.ps-bar{grid-column:1 / -1;height:10px;border-radius:99px;background:rgba(255,255,255,.28);overflow:hidden}
 .ps-bar i{display:block;height:100%;background:#fff}
 .ps-miss{grid-column:2 / -1;font-weight:600;font-size:12px}
+.ps-weak{margin:8px 0 4px;font-size:13px;font-weight:800;line-height:1.4;background:rgba(0,0,0,.2);border-radius:12px;padding:8px 10px}
 .ps-handle,.ps-snip,.ps-foot,.ps-meta,.ps-site{margin:2px 0;font-size:12px}
 .ps-foot{font-weight:800}
 .ps-site{font-weight:700}
@@ -284,8 +288,13 @@ h2,#results,#overview,#card-view,#home{scroll-margin-top:96px}
 .rc-tools{display:flex;flex-wrap:wrap;gap:8px 14px;margin:8px 0;font-size:13px}
 .rc-tools label{display:flex;gap:6px;align-items:flex-start;font-weight:700}
 .rc-paper{background:#f6f1e6;color:#1c1917;border:1px solid #e7e0d4;border-radius:2px;padding:14px 12px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"WenQuanYi Micro Hei","Droid Sans Fallback",monospace;box-shadow:0 6px 16px rgba(0,0,0,.06);overflow-wrap:anywhere}
-.rc-star,.rc-thanks,.rc-site{text-align:center;font-weight:800}
-.rc-star{font-size:15px;letter-spacing:.04em}
+.rc-star,.rc-thanks,.rc-site,.rc-kicker,.rc-grade,.rc-grade-line,.rc-headline{text-align:center}
+.rc-star,.rc-thanks,.rc-site{font-weight:800}
+.rc-star{font-size:13px;letter-spacing:.04em}
+.rc-kicker{margin:6px 0 0;font-size:11px;font-weight:800;letter-spacing:.14em;color:#57534e}
+.rc-paper h2.rc-grade{margin:0 0 6px;font-size:30px;line-height:1.12;font-weight:900;letter-spacing:-.03em;color:#1c1917}
+.rc-grade-line{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#fff;font-size:14px;font-weight:800;line-height:1.4}
+.rc-headline{margin:0 0 6px;font-size:15px;font-weight:800}
 .rc-sub{text-align:center;font-size:12px;margin:2px 0}
 .rc-rule{border:0;border-top:1px dashed #44403c;margin:8px 0}
 .rc-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;line-height:1.45}

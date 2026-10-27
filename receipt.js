@@ -15,13 +15,14 @@
     { key: 'rep', label: 'rc.line.rep' },
     { key: 'prof', label: 'rc.line.prof' },
   ];
+  const GRADE_ORDER = ['luxury', 'value', 'window', 'save', 'taste'];
   const GRADE_NAME = {
     luxury: 'rc.grade.luxury', value: 'rc.grade.value', window: 'rc.grade.window', save: 'rc.grade.save',
-    taste: 'rc.grade.taste', first: 'rc.grade.first', gap: 'rc.grade.gap',
+    taste: 'rc.grade.taste', first: 'rc.grade.first',
   };
   const GRADE_LINE = {
     luxury: 'rc.gradeLine.luxury', value: 'rc.gradeLine.value', window: 'rc.gradeLine.window', save: 'rc.gradeLine.save',
-    taste: 'rc.gradeLine.taste', first: 'rc.gradeLine.first', gap: 'rc.gradeLine.gap',
+    taste: 'rc.gradeLine.taste', first: 'rc.gradeLine.first',
   };
   const P = {
     MIN_POSTS: 10,
@@ -85,19 +86,56 @@
   }
   function sumKey(rows, key) { return rows.reduce((s, r) => s + (Number(r[key]) || 0), 0); }
 
+  function gradeDistance(id, prices, conv) {
+    if (id === 'luxury') {
+      const fp = prices.nf;
+      if (fp == null) return null;
+      if (fp >= P.LUXURY) return 0;
+      return (P.LUXURY - fp) / P.LUXURY;
+    }
+    if (id === 'value') {
+      const fp = prices.nf;
+      if (fp == null) return null;
+      if (fp <= P.VALUE) return 0;
+      return (fp - P.VALUE) / P.VALUE;
+    }
+    if (id === 'window') {
+      const vp = prices.prof;
+      if (vp == null || conv == null) return null;
+      const visitOk = vp <= P.WINDOW_VISIT;
+      const convOk = conv < P.WINDOW_CONV;
+      if (visitOk && convOk) return 0;
+      const dVisit = visitOk ? 0 : Math.max((vp - P.WINDOW_VISIT) / P.WINDOW_VISIT, 1e-9);
+      const dConv = convOk ? 0 : Math.max((conv - P.WINDOW_CONV) / P.WINDOW_CONV, 1e-9);
+      return Math.max(dVisit, dConv);
+    }
+    if (id === 'save') {
+      const bp = prices.bm;
+      const lp = prices.likes;
+      if (bp == null || lp == null || !(lp > 0)) return null;
+      const line = lp * P.SAVE_MULT;
+      if (bp < line) return 0;
+      return Math.max((bp - line) / line, 1e-9);
+    }
+    if (id === 'taste') {
+      const rp = prices.rep;
+      if (rp == null) return null;
+      if (rp <= P.TASTE) return 0;
+      return Math.max((rp - P.TASTE) / P.TASTE, 1e-9);
+    }
+    return null;
+  }
+
   function pickGrade(n, prices, conv) {
     if (n < P.MIN_POSTS) return 'first';
-    const fp = prices.nf;
-    if (fp != null && fp >= P.LUXURY) return 'luxury';
-    if (fp != null && fp <= P.VALUE) return 'value';
-    const vp = prices.prof;
-    if (vp != null && vp <= P.WINDOW_VISIT && conv != null && conv < P.WINDOW_CONV) return 'window';
-    const bp = prices.bm;
-    const lp = prices.likes;
-    if (bp != null && lp != null && bp < lp * P.SAVE_MULT) return 'save';
-    const rp = prices.rep;
-    if (rp != null && rp <= P.TASTE) return 'taste';
-    return 'gap';
+    let best = null;
+    let bestD = Infinity;
+    GRADE_ORDER.forEach((id) => {
+      const d = gradeDistance(id, prices, conv);
+      if (d == null || !isFinite(d)) return;
+      if (d < bestD) { bestD = d; best = id; }
+    });
+    return best || 'value';
   }
 
   XA.receiptModel = function (A, opts) {
@@ -232,6 +270,32 @@
     return '제 팔로워 1명 값은 노출 ' + num + '회였습니다 🧾 당신은 얼마?\n' + url;
   };
 
+  function barBits(seed) {
+    const s = String(Math.abs(Math.round(Number(seed) || 0))).padStart(6, '0');
+    const bits = [];
+    for (let i = 0; i < s.length; i++) {
+      const n = Number(s[i]);
+      bits.push(2 + (n % 3));
+      bits.push(1 + (n % 2));
+    }
+    const out = [];
+    while (out.length < 40) out.push.apply(out, bits);
+    return out.slice(0, 40);
+  }
+  function barcodeHTML(seed) {
+    const bits = barBits(seed);
+    return `<div class="rc-bars" id="rc-barcode" data-seed="${Math.round(Number(seed) || 0)}" aria-hidden="true">${bits.map((w, i) => `<i style="flex:${w} 1 0;background:${i % 2 ? 'transparent' : '#1c1917'}"></i>`).join('')}</div>`;
+  }
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+
   function lineHTML(l) {
     if (l.sold) {
       return `<div class="rc-line" data-key="${esc(l.key)}" data-sold="1" data-num="${Math.round(l.qty)}" data-imp="${Math.round(l.imp)}"><span>${esc(l.label)}</span><span class="sold">${esc(t('rc.sold'))}</span></div>`;
@@ -272,7 +336,8 @@
     return `<div class="rc-paper" id="rc-paper" data-grade="${esc(model.grade)}">
       ${flag}
       <div class="rc-star">${star}</div>
-      <p class="rc-grade" id="rc-grade">${esc(t('rc.guest'))} ${gradeName}</p>
+      <p class="rc-kicker">${esc(t('rc.guest'))}</p>
+      <h2 class="rc-grade" id="rc-grade">${gradeName}</h2>
       <p class="rc-grade-line">${gradeLine}</p>
       <p class="rc-headline" id="rc-headline" data-kind="${esc(model.headlineKind)}"${model.headline == null ? '' : ` data-price="${model.headline}"`}>${headline}</p>
       <p class="rc-sub" id="rc-handle">${handleLine}</p>
@@ -284,6 +349,7 @@
       <hr class="rc-rule">
       ${sum}
       ${miss}
+      ${barcodeHTML(model.imp)}
       <p class="rc-thanks">${esc(t('rc.thanks'))}</p>
       <p class="rc-site">${esc(t('brand.name'))} · tuki0609.github.io/account-compass</p>
     </div>`;
@@ -300,73 +366,123 @@
     return out.length ? out : [''];
   }
 
-  XA.receiptDraw = function (model) {
-    const W = 1080;
-    const H = 1350;
-    const c = document.createElement('canvas');
-    c.width = W; c.height = H;
-    const g = c.getContext('2d');
+  function drawBarcode(g, x, y, w, h, seed) {
+    const bits = barBits(seed);
+    const sum = bits.reduce((a, b) => a + b, 0) || 1;
+    const unit = w / sum;
+    let cx = x;
+    g.fillStyle = '#1c1917';
+    bits.forEach((bw, i) => {
+      const span = unit * bw;
+      if (i % 2 === 0) g.fillRect(cx, y, Math.max(2, span - 2), h);
+      cx += span;
+    });
+  }
+
+  function paintReceipt(g, model, W, H) {
     g.fillStyle = '#efe7d6';
     g.fillRect(0, 0, W, H);
     g.fillStyle = '#f7f3ea';
-    g.fillRect(70, 48, W - 140, H - 96);
+    g.fillRect(48, 24, W - 96, H - 48);
     g.fillStyle = '#1c1917';
     g.textAlign = 'center';
-    g.font = '800 48px ' + FONT;
-    let y = 130;
+    let y = 78;
+    g.font = '800 32px ' + FONT;
     g.fillText(t('rc.star'), W / 2, y);
-    g.font = '800 40px ' + FONT;
-    y += 64;
-    g.fillText(t('rc.guest') + ' ' + t(GRADE_NAME[model.grade]), W / 2, y);
-    g.font = '600 30px ' + FONT;
-    y += 48;
-    wrapText(g, t(GRADE_LINE[model.grade]), W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 40; });
+    y += 40;
+    g.fillStyle = '#57534e';
+    g.font = '700 24px ' + FONT;
+    g.fillText(t('rc.guest'), W / 2, y);
+    y += 12;
+    const grade = t(GRADE_NAME[model.grade]);
+    let gsize = 92;
+    while (gsize > 68) {
+      g.font = '900 ' + gsize + 'px ' + FONT;
+      if (g.measureText(grade).width <= W - 160) break;
+      gsize -= 4;
+    }
+    g.font = '900 ' + gsize + 'px ' + FONT;
+    g.fillStyle = '#1c1917';
+    wrapText(g, grade, W - 160).slice(0, 2).forEach((ln) => { y += gsize + 6; g.fillText(ln, W / 2, y); });
+    y += 22;
+    g.font = '800 32px ' + FONT;
+    const tease = wrapText(g, t(GRADE_LINE[model.grade]), W - 240).slice(0, 3);
+    const boxH = 24 + tease.length * 44;
+    g.fillStyle = '#ffffff';
+    roundRect(g, 100, y, W - 200, boxH, 18);
+    g.fill();
+    g.fillStyle = '#1c1917';
+    tease.forEach((ln, i) => g.fillText(ln, W / 2, y + 40 + i * 44));
+    y += boxH + 40;
     g.font = '800 34px ' + FONT;
     const head = model.headlineKind === 'miss' ? t('rc.headlineMiss') : (model.headline == null ? t('rc.headlineSold') : t('rc.headline', { n: fmtInt(model.headline) }));
-    wrapText(g, head, W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 44; });
-    g.font = '600 28px ' + FONT;
+    wrapText(g, head, W - 180).forEach((ln) => { g.fillText(ln, W / 2, y); y += 42; });
+    g.font = '600 26px ' + FONT;
     const handleLine = !model.handle ? t('rc.noHandle') : (model.hideHandle ? t('rc.handleHidden') : '@' + model.handle);
-    g.fillText(handleLine, W / 2, y + 8);
-    y += 44;
-    g.fillText(model.period ? (model.period.from === model.period.to ? model.period.from : t('rc.period', model.period)) : t('rc.noDate'), W / 2, y);
+    g.fillText(handleLine, W / 2, y + 4);
     y += 36;
+    g.fillText(model.period ? (model.period.from === model.period.to ? model.period.from : t('rc.period', model.period)) : t('rc.noDate'), W / 2, y);
+    y += 34;
+    g.font = '600 24px ' + FONT;
+    g.fillText(t(model.mode === 'overview' ? 'rc.basisDays' : 'rc.basisPosts', { n: fmtInt(model.n) }), W / 2, y);
+    y += 22;
     g.strokeStyle = '#44403c';
+    g.lineWidth = 2;
     g.setLineDash([8, 8]);
-    g.beginPath(); g.moveTo(120, y); g.lineTo(W - 120, y); g.stroke();
+    g.beginPath(); g.moveTo(110, y); g.lineTo(W - 110, y); g.stroke();
     g.setLineDash([]);
-    y += 56;
+    y += 46;
     g.textAlign = 'left';
-    g.font = '600 32px ' + FONT;
+    g.font = '600 30px ' + FONT;
+    g.fillStyle = '#1c1917';
     model.lines.forEach((l) => {
-      g.fillText(l.label, 120, y);
+      g.fillText(l.label, 110, y);
       g.textAlign = 'right';
-      g.fillText(l.sold ? t('rc.sold') : (fmtInt(l.rounded) + '  ' + t('rc.unit')), W - 120, y);
+      g.fillText(l.sold ? t('rc.sold') : (fmtInt(l.rounded) + '  ' + t('rc.unit')), W - 110, y);
       g.textAlign = 'left';
-      y += 48;
+      y += 44;
     });
-    g.font = '500 28px ' + FONT;
-    if (model.expensive) { y += 8; g.fillText(t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }), 120, y); y += 40; }
-    if (model.cheap) { g.fillText(t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }), 120, y); y += 40; }
-    if (!model.hideSnippet && model.expensive && model.expensive.snippet) { g.fillText(model.expensive.snippet, 120, y); y += 36; }
-    if (model.refund) { g.fillText(t('rc.refund') + '  ' + fmtInt(model.refund.qty), 120, y); y += 40; }
-    if (model.coupon) { g.fillText(t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }), 120, y); y += 40; }
+    g.font = '500 26px ' + FONT;
+    if (model.expensive) { y += 6; wrapText(g, t('rc.exp', { day: model.expensive.date, n: fmtInt(model.expensive.rounded) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
+    if (model.cheap) { wrapText(g, t('rc.cheap', { day: model.cheap.date, n: fmtInt(model.cheap.rounded) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
+    if (!model.hideSnippet && model.expensive && model.expensive.snippet) { g.fillText(model.expensive.snippet, 110, y); y += 34; }
+    if (model.refund) { g.fillText(t('rc.refund') + '  ' + fmtInt(model.refund.qty), 110, y); y += 36; }
+    if (model.coupon) { wrapText(g, t('rc.coupon', { h: String(model.coupon.hour), n: String(model.coupon.pct) }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 34; }); }
     y += 8;
     g.setLineDash([8, 8]);
-    g.beginPath(); g.moveTo(120, y); g.lineTo(W - 120, y); g.stroke();
+    g.beginPath(); g.moveTo(110, y); g.lineTo(W - 110, y); g.stroke();
     g.setLineDash([]);
-    y += 48;
-    g.font = '800 32px ' + FONT;
-    if (model.nfQty != null) g.fillText(t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }), 120, y);
+    y += 42;
+    g.font = '800 30px ' + FONT;
+    if (model.nfQty != null) { g.fillText(t('rc.sum', { nf: fmtInt(model.nfQty), imp: fmtInt(model.imp) }), 110, y); y += 36; }
     if (model.missingLabels.length) {
-      y += 40;
-      g.font = '400 26px ' + FONT;
-      wrapText(g, t('rc.missing', { cols: model.missingLabels.join(', ') }), W - 200).forEach((ln) => { g.fillText(ln, 120, y); y += 34; });
+      g.font = '400 24px ' + FONT;
+      wrapText(g, t('rc.missing', { cols: model.missingLabels.join(', ') }), W - 220).forEach((ln) => { g.fillText(ln, 110, y); y += 30; });
     }
+    y += 12;
+    drawBarcode(g, 120, y, W - 240, 70, model.imp);
+    y += 96;
     g.textAlign = 'center';
-    g.font = '800 36px ' + FONT;
-    g.fillText(t('rc.thanks'), W / 2, H - 110);
-    g.font = '700 26px ' + FONT;
-    g.fillText(t('brand.name') + '  ·  tuki0609.github.io/account-compass', W / 2, H - 60);
+    g.fillStyle = '#1c1917';
+    g.font = '900 36px ' + FONT;
+    g.fillText(t('rc.thanks'), W / 2, y);
+    y += 40;
+    g.font = '700 24px ' + FONT;
+    g.fillText(t('brand.name') + '  ·  tuki0609.github.io/account-compass', W / 2, y);
+    return y + 28;
+  }
+
+  XA.receiptDraw = function (model) {
+    const W = 1080;
+    const scratch = document.createElement('canvas');
+    scratch.width = W;
+    scratch.height = 2200;
+    const bottom = paintReceipt(scratch.getContext('2d'), model, W, 2200);
+    const H = Math.max(720, bottom + 20);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    paintReceipt(c.getContext('2d'), model, W, H);
     return c;
   };
 

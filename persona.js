@@ -55,6 +55,11 @@
     dawn: 'ps.name.dawn', magnet: 'ps.name.magnet', window: 'ps.name.window', repost: 'ps.name.repost',
     link: 'ps.name.link', short: 'ps.name.short', long: 'ps.name.long', sprout: 'ps.name.sprout',
   };
+  const WEAK_KEY = {
+    conv: 'ps.weak.conv', save: 'ps.weak.save', chat: 'ps.weak.chat', magnet: 'ps.weak.magnet',
+    steady: 'ps.weak.steady', hit: 'ps.weak.hit', none: 'ps.weak.none',
+  };
+  const EMOJI_FONT = '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif';
   const ROAST_KEY = {
     save: ['ps.roast.save.0', 'ps.roast.save.1', 'ps.roast.save.2', 'ps.roast.save.3'],
     chat: ['ps.roast.chat.0', 'ps.roast.chat.1', 'ps.roast.chat.2', 'ps.roast.chat.3'],
@@ -153,6 +158,48 @@
     return String(Math.round(v * 1e6) / 1e6);
   }
 
+  function pctLabel(v) {
+    if (!finite(v)) return '';
+    const p = Math.round(v * 1000) / 10;
+    return (Math.abs(p - Math.round(p)) < 1e-9 ? String(Math.round(p)) : String(p)) + '%';
+  }
+  function numLabel(v) {
+    if (!finite(v)) return '';
+    const n = Math.round(v * 10) / 10;
+    return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : String(n);
+  }
+  function weakPoint(m) {
+    const order = { conv: 0, save: 1, chat: 2, magnet: 3, steady: 4, hit: 5 };
+    const cands = [];
+    if (finite(m.conv) && m.profSum > 0) cands.push({ id: 'conv', strength: Math.min(1, m.conv / 0.2), raw: m.conv, n: pctLabel(m.conv) });
+    if (m.bars[0] && finite(m.bars[0].raw)) cands.push({ id: 'save', strength: Math.min(1, m.bars[0].raw), raw: m.bars[0].raw, n: pctLabel(m.bars[0].raw) });
+    if (m.bars[1] && finite(m.bars[1].raw)) cands.push({ id: 'chat', strength: Math.min(1, m.bars[1].raw / 1.5), raw: m.bars[1].raw, n: pctLabel(m.bars[1].raw) });
+    if (m.bars[4] && finite(m.per1k)) cands.push({ id: 'magnet', strength: Math.min(1, m.per1k / 10), raw: m.per1k, n: numLabel(m.per1k) });
+    if (finite(m.active)) cands.push({ id: 'steady', strength: Math.min(1, m.active), raw: m.active, n: pctLabel(m.active) });
+    if (finite(m.hitRaw) && m.hitShow != null) cands.push({ id: 'hit', strength: Math.min(1, m.hitRaw / 40), raw: m.hitRaw, n: m.hitShow });
+    cands.sort((a, b) => a.strength - b.strength || order[a.id] - order[b.id]);
+    if (!cands.length) return { id: 'none', raw: null, text: t(WEAK_KEY.none) };
+    const w = cands[0];
+    return { id: w.id, raw: w.raw, text: t(WEAK_KEY[w.id], { n: w.n }) };
+  }
+  function mixHex(hex, target, tMix) {
+    const h = String(hex || '#15803d').replace('#', '');
+    const o = String(target).replace('#', '');
+    const n = (i) => parseInt(h.slice(i, i + 2), 16);
+    const m = (i) => parseInt(o.slice(i, i + 2), 16);
+    const c = [0, 2, 4].map((i) => Math.max(0, Math.min(255, Math.round(n(i) + (m(i) - n(i)) * tMix))));
+    return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+  }
+  function roundRect(g, x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath();
+    g.moveTo(x + rr, y);
+    g.arcTo(x + w, y, x + w, y + h, rr);
+    g.arcTo(x + w, y + h, x, y + h, rr);
+    g.arcTo(x, y + h, x, y, rr);
+    g.arcTo(x, y, x + w, y, rr);
+    g.closePath();
+  }
   function namesOf(id) {
     const key = NAME_KEY[id];
     return { ko: (XA.I18N && XA.I18N.ko[key]) || t(key), en: (XA.I18N && XA.I18N.en[key]) || t(key), ja: (XA.I18N && XA.I18N.ja[key]) || t(key) };
@@ -274,6 +321,7 @@
       { id: 'magnet', raw: per1k, bar: toBar(per1k, C.BAR_MAGNET), num: nfSum, den: impSum, miss: !has('nf') },
     ];
     const missing = ['likes', 'bm', 'rep', 'rt', 'nf', 'prof', 'url', 'text', 'date', 'id'].filter((k) => !has(k));
+    const weak = weakPoint({ conv: conv, profSum: profSum, bars: bars, per1k: per1k, active: active, hitRaw: hitRaw, hitShow: hitShow(hitRaw) });
     return {
       id: id,
       emoji: theme.emoji,
@@ -318,6 +366,9 @@
       snippet: snippet,
       missing: missing,
       whyDawn: hours.length ? '' : 'ps.why.noTime',
+      weakId: weak.id,
+      weakRaw: weak.raw,
+      weakText: weak.text,
     };
   };
 
@@ -371,19 +422,23 @@
     const handleLine = !model.handle ? '' : (model.hideHandle ? `<p class="ps-handle" id="ps-handle">${esc(t('ps.handleHidden'))}</p>` : `<p class="ps-handle" id="ps-handle">@${esc(model.handle)}</p>`);
     const snip = model.snippet && !model.hideSnippet ? `<p class="ps-snip" id="ps-snip">${esc(model.snippet)}</p>` : '';
     const why = whyRows(model).map((r) => `<li data-k="${esc(r.k)}"${finite(r.raw) ? ` data-raw="${esc(rawAttr(r.raw))}"` : ''}>${esc(r.text)}</li>`).join('');
-    return `<article class="ps-visual" id="ps-card" data-id="${esc(model.id)}" data-roast="${model.roastIndex}" data-n="${model.n}" data-imp="${Math.round(model.impSum)}" style="--ps:${model.color};background:${model.color}">
+    const weak = `<p class="ps-weak" id="ps-weak" data-weak="${esc(model.weakId || 'none')}"${finite(model.weakRaw) ? ` data-raw="${esc(rawAttr(model.weakRaw))}"` : ''}>${esc(t('ps.weak.k'))} · ${esc(model.weakText || '')}</p>`;
+    return `<article class="ps-visual" id="ps-card" data-id="${esc(model.id)}" data-roast="${model.roastIndex}" data-n="${model.n}" data-imp="${Math.round(model.impSum)}" style="--ps:${esc(model.color)}">
+      <div class="ps-inner">
       ${flag}
       <p class="ps-emoji" aria-hidden="true">${model.emoji}</p>
-      <h2 class="ps-name">${model.emoji} ${esc(model.name)}</h2>
-      <p class="ps-roast" id="ps-roast">${esc(model.roast)}</p>
+      <h2 class="ps-name">${esc(model.name)}</h2>
+      <div class="ps-roastbox"><p class="ps-roast" id="ps-roast">${esc(model.roast)}</p></div>
       <p class="ps-play">${esc(model.play)}</p>
       ${hit}
       <div class="ps-stats">${barHTML(model)}</div>
+      ${weak}
       ${handleLine}
       ${snip}
       <p class="ps-foot">${esc(t('ps.footer'))}</p>
       <p class="ps-meta" id="ps-period"${model.period ? ` data-from="${esc(model.period.from)}" data-to="${esc(model.period.to)}"` : ''}>${period} · ${esc(t('ps.count', { n: fmtInt(model.n) }))}</p>
       <p class="ps-site">tuki0609.github.io/account-compass</p>
+      </div>
     </article>
     <details class="ps-why" id="ps-why"><summary>${esc(t('ps.why'))}</summary><ul>${why}</ul></details>`;
   }
@@ -399,6 +454,30 @@
     return out.length ? out : [''];
   }
 
+  function paintCardBackdrop(g, W, H, color) {
+    const grd = g.createLinearGradient(0, 0, W, H);
+    grd.addColorStop(0, mixHex(color, '#ffffff', 0.4));
+    grd.addColorStop(0.48, color);
+    grd.addColorStop(1, mixHex(color, '#000000', 0.4));
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,255,255,0.16)';
+    for (let yy = 14; yy < H; yy += 24) {
+      const shift = (Math.floor(yy / 24) % 2) ? 6 : 18;
+      for (let xx = shift; xx < W; xx += 24) {
+        g.beginPath();
+        g.arc(xx, yy, 1.7, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.fillStyle = 'rgba(255,255,255,0.14)';
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.lineWidth = 4;
+    roundRect(g, 32, 32, W - 64, H - 64, 42);
+    g.fill();
+    g.stroke();
+  }
+
   XA.personaDraw = function (model, opt) {
     opt = opt || {};
     const wide = !!opt.wide;
@@ -407,73 +486,125 @@
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
-    g.fillStyle = model.color || '#15803d';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#ffffff';
+    const color = model.color || '#15803d';
+    paintCardBackdrop(g, W, H, color);
     g.textAlign = 'center';
-    const name = (model.emoji || '') + '  ' + (model.name || '');
+    g.fillStyle = '#ffffff';
     if (wide) {
-      g.font = '800 64px ' + FONT;
-      g.fillText(name, W / 2, 120);
-      g.font = '600 28px ' + FONT;
-      wrapText(g, model.roast, W - 120).slice(0, 2).forEach((ln, i) => g.fillText(ln, W / 2, 180 + i * 36));
-      g.font = '800 92px ' + FONT;
-      g.fillText(model.hitShow == null ? t('ps.hitNone') : '×' + model.hitShow, W / 2, 320);
-      g.font = '700 28px ' + FONT;
-      g.fillText(t('ps.footer'), W / 2, 560);
+      g.font = '180px ' + EMOJI_FONT;
+      g.fillText(model.emoji || '', 210, 400);
+      g.font = '900 72px ' + FONT;
+      g.textAlign = 'left';
+      g.fillText(model.name || '', 400, 150);
+      g.fillStyle = '#ffffff';
+      roundRect(g, 400, 190, 740, 110, 20);
+      g.fill();
+      g.fillStyle = '#1c1917';
+      g.font = '800 30px ' + FONT;
+      wrapText(g, model.roast || '', 700).slice(0, 2).forEach((ln, i) => g.fillText(ln, 424, 236 + i * 40));
+      g.fillStyle = '#ffffff';
+      g.font = '900 92px ' + FONT;
+      g.fillText(model.hitShow == null ? '—' : '×' + model.hitShow, 400, 420);
       g.font = '700 24px ' + FONT;
-      g.fillText('tuki0609.github.io/account-compass', W / 2, 620);
+      wrapText(g, t('ps.weak.k') + ' · ' + (model.weakText || ''), 740).slice(0, 2).forEach((ln, i) => g.fillText(ln, 400, 480 + i * 30));
+      g.font = '700 22px ' + FONT;
+      g.fillText(t('ps.footer'), 400, 590);
       return c;
     }
-    g.font = '800 72px ' + FONT;
-    g.fillText(model.emoji || '', W / 2, 150);
-    g.font = '800 64px ' + FONT;
-    wrapText(g, model.name, W - 140).slice(0, 2).forEach((ln, i) => g.fillText(ln, W / 2, 250 + i * 74));
-    g.font = '600 32px ' + FONT;
-    let y = 430;
-    wrapText(g, model.roast, W - 160).slice(0, 4).forEach((ln) => { g.fillText(ln, W / 2, y); y += 42; });
-    g.font = '500 26px ' + FONT;
-    g.fillText(model.play, W / 2, y + 10);
-    y += 90;
-    g.font = '800 120px ' + FONT;
-    g.fillText(model.hitShow == null ? '—' : '×' + model.hitShow, W / 2, y + 80);
-    y += 120;
-    g.font = '700 30px ' + FONT;
-    if (model.hitShow != null) { g.fillText(t('ps.hitLine', { n: model.hitShow }), W / 2, y); y += 48; }
-    g.textAlign = 'left';
-    g.font = '700 28px ' + FONT;
-    model.bars.forEach((b) => {
-      if (b.bar == null) return;
-      y += 46;
-      g.fillText(t(STAT_KEY[b.id]), 120, y);
-      g.textAlign = 'right';
-      g.fillText(String(b.bar), W - 120, y);
-      g.textAlign = 'left';
-      g.fillStyle = 'rgba(255,255,255,.3)';
-      g.fillRect(120, y + 12, W - 240, 14);
-      g.fillStyle = '#ffffff';
-      g.fillRect(120, y + 12, (W - 240) * (b.bar / 99), 14);
-      y += 20;
-    });
-    if (!model.hideHandle && model.handle) {
-      y += 48;
+    let y = 70;
+    if (XA._isSample) {
+      g.font = '800 26px ' + FONT;
+      const label = t('ps.sample');
+      const tw = Math.min(W - 220, g.measureText(label).width + 36);
+      g.fillStyle = '#fde68a';
+      roundRect(g, (W - tw) / 2, y, tw, 40, 20);
+      g.fill();
+      g.fillStyle = '#78350f';
+      g.fillText(label, W / 2, y + 28);
+      y += 56;
+    }
+    y += 168;
+    g.font = '220px ' + EMOJI_FONT;
+    g.fillStyle = '#ffffff';
+    g.fillText(model.emoji || '', W / 2, y);
+    g.font = '900 96px ' + FONT;
+    const nameLines = wrapText(g, model.name || '', W - 180).slice(0, 2);
+    nameLines.forEach((ln) => { y += 104; g.fillText(ln, W / 2, y); });
+    y += 18;
+    g.font = '800 34px ' + FONT;
+    const roastLines = wrapText(g, model.roast || '', W - 240).slice(0, 3);
+    const boxH = 24 + roastLines.length * 46;
+    g.fillStyle = '#ffffff';
+    roundRect(g, 84, y, W - 168, boxH, 22);
+    g.fill();
+    g.fillStyle = '#1c1917';
+    roastLines.forEach((ln, i) => g.fillText(ln, W / 2, y + 44 + i * 46));
+    y += boxH + 32;
+    g.fillStyle = 'rgba(255,255,255,0.92)';
+    g.font = '600 24px ' + FONT;
+    g.fillText(model.play || '', W / 2, y);
+    y += 16;
+    g.fillStyle = '#ffffff';
+    g.font = '900 112px ' + FONT;
+    g.fillText(model.hitShow == null ? '—' : '×' + model.hitShow, W / 2, y + 100);
+    y += 118;
+    if (model.hitShow != null) {
       g.font = '700 28px ' + FONT;
-      g.textAlign = 'center';
-      g.fillText('@' + model.handle, W / 2, y);
+      g.fillText(t('ps.hitLine', { n: model.hitShow }), W / 2, y);
+      y += 28;
+    }
+    const barStep = nameLines.length > 1 ? 46 : 52;
+    g.textAlign = 'left';
+    model.bars.forEach((b) => {
+      g.font = '800 26px ' + FONT;
+      g.fillStyle = '#ffffff';
+      if (b.bar == null) {
+        g.fillText(t(STAT_KEY[b.id]) + '   ' + t('ps.barMiss'), 96, y + 22);
+        y += barStep - 8;
+        return;
+      }
+      g.fillText(t(STAT_KEY[b.id]), 96, y + 22);
+      g.textAlign = 'right';
+      g.font = '900 28px ' + FONT;
+      g.fillText(String(b.bar), W - 96, y + 22);
+      g.textAlign = 'left';
+      g.fillStyle = 'rgba(255,255,255,0.28)';
+      roundRect(g, 96, y + 32, W - 192, 14, 7);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      roundRect(g, 96, y + 32, Math.max(14, (W - 192) * (b.bar / 99)), 14, 7);
+      g.fill();
+      y += barStep;
+    });
+    y += 12;
+    g.textAlign = 'center';
+    const weak = t('ps.weak.k') + ' · ' + (model.weakText || '');
+    g.font = '700 26px ' + FONT;
+    const wlines = wrapText(g, weak, W - 240).slice(0, 2);
+    const wH = 18 + wlines.length * 34;
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    roundRect(g, 84, y, W - 168, wH, 16);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    wlines.forEach((ln, i) => g.fillText(ln, W / 2, y + 32 + i * 34));
+    y += wH + 8;
+    if (!model.hideHandle && model.handle) {
+      g.font = '700 26px ' + FONT;
+      g.fillText('@' + model.handle, W / 2, y + 28);
+      y += 36;
     }
     if (!model.hideSnippet && model.snippet) {
-      y += 40;
-      g.font = '500 26px ' + FONT;
-      g.textAlign = 'center';
-      g.fillText(model.snippet, W / 2, y);
+      g.font = '500 24px ' + FONT;
+      g.fillText(model.snippet, W / 2, y + 28);
     }
-    g.textAlign = 'center';
-    g.font = '700 26px ' + FONT;
-    g.fillText(t('ps.footer'), W / 2, H - 120);
+    const footY = Math.max(y + 48, H - 118);
+    g.font = '800 26px ' + FONT;
+    g.fillStyle = '#ffffff';
+    g.fillText(t('ps.footer'), W / 2, Math.min(footY, H - 118));
     const meta = (model.period ? (model.period.from === model.period.to ? model.period.from : t('ps.period', model.period)) : t('ps.noDate')) + '  ·  ' + t('ps.count', { n: fmtInt(model.n) });
-    g.font = '600 24px ' + FONT;
-    g.fillText(meta, W / 2, H - 80);
-    g.font = '700 26px ' + FONT;
+    g.font = '600 22px ' + FONT;
+    g.fillText(meta, W / 2, H - 76);
+    g.font = '700 24px ' + FONT;
     g.fillText('tuki0609.github.io/account-compass', W / 2, H - 40);
     return c;
   };
