@@ -252,7 +252,7 @@
 
   XA.registerModule({
     id: 'soon-calendar',
-    order: 3,
+    order: 4,
     category: 'soon',
     status: 'soon',
     icon: '🗓️',
@@ -263,7 +263,7 @@
   });
   XA.registerModule({
     id: 'soon-hooks',
-    order: 4,
+    order: 5,
     category: 'soon',
     status: 'soon',
     icon: '✍️',
@@ -272,18 +272,6 @@
     needsKey: 'hub.needs.soonHook',
     requires: ['text'],
   });
-  XA.registerModule({
-    id: 'soon-quote',
-    order: 5,
-    category: 'soon',
-    status: 'soon',
-    icon: '🖼️',
-    titleKey: 'hub.card.soonQuote.t',
-    descKey: 'hub.card.soonQuote.d',
-    needsKey: 'hub.needs.soonQuote',
-    requires: ['text'],
-  });
-
   bindCompassNav();
   bindBack();
   document.addEventListener('langchange', () => { if (XA.syncHub) XA.syncHub(); });

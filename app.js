@@ -260,6 +260,7 @@
       if (ms != null) { hasTime = true; timeSrc.id++; }
       else { const tt = timeFromDate(g(r, 'date')); if (tt) { ms = tt.ms; hasTime = tt.hasTime; tt.hasTime ? timeSrc.dateTime++ : timeSrc.dateOnly++; if (tt.assumed) timeSrc.assumed++; } else timeSrc.none++; }
       const p = { i, id: pid, link, text: String(g(r, 'text') || ''), ms, hasTime,
+        dateRaw: map.date != null ? String(g(r, 'date') || '') : '',
         imp: num(g(r, 'imp')), likes: num(g(r, 'likes')), eng: num(g(r, 'eng')), bm: num(g(r, 'bm')), shares: num(g(r, 'shares')),
         nf: num(g(r, 'nf')), rep: num(g(r, 'rep')), rt: num(g(r, 'rt')), prof: num(g(r, 'prof')), det: num(g(r, 'det')), url: num(g(r, 'url')), tag: num(g(r, 'tag')), plink: num(g(r, 'plink')) };
       if (map.eng == null) p.eng = p.likes + p.rep + p.rt + p.bm + p.shares + p.prof + p.det + p.url;
