@@ -117,6 +117,7 @@
       <div class="muted small" id="ov-col-info">${XA.colInfo(A.map, A.unmapped, ['imp', 'eng', 'nf'])}${notes.length ? ' · ' + notes.join(' · ') : ''} <span class="hint">${t('colinfo.hint')}</span></div>
       <h2>${t('ov.h.summary')}</h2>
       <div class="kpis">${kpis.map(([k, v, s]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join('')}</div>
+      ${typeof XA.followShareInner === 'function' ? `<h2>${esc(t('results.h.fsrc'))}</h2>${XA.followShareInner('overview', isSample)}` : ''}
       <h2>${t('ov.h.obs')}</h2>
       <div class="cards2">${obs.map((o) => `<div class="card sug"><div class="t">${o.t}</div><p>${o.p}</p></div>`).join('')}</div>
       <h2>${t('ov.h.daily')}</h2>
