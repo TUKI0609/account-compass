@@ -167,18 +167,16 @@ h2,#results,#overview,#card-view,#home{scroll-margin-top:96px}
 
 /* 홈: 카드가 먼저, CSV는 아래의 얇은 줄 */
 .home-lead h1{font-size:16px;line-height:1.35;margin:0 0 8px;font-weight:800}
-#hub-board{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;align-items:start}
-#hub-board .hub-cat[data-cat="soon"]{grid-column:1 / -1}
+#hub-board{display:flex;flex-direction:column;gap:10px}
 .hub-cat{margin:0;min-width:0}
 .hub-cat h2{font-size:13px;margin:0 0 6px;letter-spacing:.02em;color:#334155}
-.hub-grid{display:grid;grid-template-columns:1fr;gap:8px}
-.hub-cat[data-cat="soon"] .hub-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hub-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 @media (max-width:800px){
-  .hub-cat[data-cat="soon"] .hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 .hub-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-width:0;text-align:left;font:inherit;color:var(--ink);background:#fff;border:1px solid #c7d2fe;border-radius:14px;padding:10px 12px;min-height:0;cursor:pointer;box-shadow:0 1px 2px rgba(79,70,229,.06)}
 .hub-card:hover{border-color:var(--pri);background:#f8f8ff}
-.hub-card:focus-visible,.back-home:focus-visible,.compass-nav button:focus-visible,#wx-share:focus-visible{outline:3px solid #4f46e5;outline-offset:2px}
+.hub-card:focus-visible,.back-home:focus-visible,.compass-nav button:focus-visible,#wx-share:focus-visible,#rc-save:focus-visible{outline:3px solid #4f46e5;outline-offset:2px}
 .hub-card .hd{display:flex;align-items:center;gap:6px;width:100%;min-width:0}
 .hub-card .num{font-size:12px;font-weight:800;color:var(--pri2);letter-spacing:.04em;flex:0 0 auto}
 .hub-card .ic{font-size:20px;line-height:1;flex:0 0 auto}
@@ -186,9 +184,9 @@ h2,#results,#overview,#card-view,#home{scroll-margin-top:96px}
 .hub-card .dd{margin:0;font-size:12.5px;line-height:1.35;color:#243044;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 @media (max-width:800px){
   .home-lead h1{font-size:15px;margin:0 0 4px}
-  .hub-cat h2{margin:0 0 4px}
-  #hub-board{gap:6px 8px}
-  .hub-card{padding:8px}
+  .hub-cat h2{margin:0 0 2px;font-size:12px}
+  #hub-board{gap:4px}
+  .hub-card{padding:6px 8px}
   .hub-card .dd{-webkit-line-clamp:1}
   .hub-card .meta{gap:2px;margin-top:2px}
   .hub-card .needs:not(.quiet){display:none}
@@ -239,6 +237,28 @@ h2,#results,#overview,#card-view,#home{scroll-margin-top:96px}
 .wx-note{margin:8px 0 0;font-size:13px;color:#3d4a5c}
 .wx-honest{margin:10px 0;font-size:12.5px;color:#334155}
 .wx-blocked p{margin:8px 0}
+
+/* 내 X 영수증 */
+.rc-wrap{max-width:420px;margin:0 auto;width:100%}
+.rc-tools{display:flex;flex-wrap:wrap;gap:8px 14px;margin:0 0 8px;font-size:13px}
+.rc-tools label{display:flex;gap:6px;align-items:flex-start;font-weight:700}
+.rc-paper{background:#f6f1e6;color:#1c1917;border:1px solid #e7e0d4;border-radius:2px;padding:14px 12px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"WenQuanYi Micro Hei","Droid Sans Fallback",monospace;box-shadow:0 6px 16px rgba(0,0,0,.06);overflow-wrap:anywhere}
+.rc-star,.rc-thanks,.rc-site{text-align:center;font-weight:800}
+.rc-star{font-size:15px;letter-spacing:.04em}
+.rc-sub{text-align:center;font-size:12px;margin:2px 0}
+.rc-rule{border:0;border-top:1px dashed #44403c;margin:8px 0}
+.rc-line{display:flex;justify-content:space-between;gap:8px;font-size:13px;line-height:1.45}
+.rc-line b{font-weight:800}
+.rc-line .u{color:#44403c}
+.rc-total{font-size:15px;font-weight:800}
+.rc-note{font-size:12.5px;line-height:1.4;margin:0}
+.rc-miss{font-size:12.5px;line-height:1.4;margin:8px 0 0;color:#7c2d12}
+.rc-bars{display:flex;align-items:stretch;gap:2px;height:36px;margin:8px 0}
+.rc-bars i{display:block;background:#1c1917;height:100%}
+.rc-thanks{margin:4px 0 0;font-size:13px}
+.rc-site{font-size:11px;font-weight:700;color:#57534e}
+.rc-flag{display:inline-block;background:#fde68a;color:#78350f;font-weight:800;font-size:12px;border-radius:99px;padding:2px 8px;margin:0 0 6px}
+.rc-honest{font-size:12.5px;color:#44403c;margin:8px 0 0}
 
 #reply-box{display:grid;gap:6px;margin-top:10px}.tgl{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-weight:600;flex-wrap:wrap}.tgl input{margin-top:3px;width:18px;height:18px}
 .tgl .muted{flex-basis:100%;font-weight:400;padding-left:26px}

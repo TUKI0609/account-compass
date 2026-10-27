@@ -6,7 +6,8 @@
 - v2 스크린샷(가상 샘플 데이터만) → screenshots/v2_*.png
 실제 파일 회귀 테스트(선택): REAL_CONTENT=/path REAL_OVERVIEW=/path  — 실제 파일은 스크린샷을 찍지 않음.
 실행: .venv/bin/python tools/test.py   (x-analyzer 폴더 또는 그 상위 폴더에서)"""
-import subprocess, time, sys, json, os, re, glob, struct
+import subprocess, time, sys, json, os, re, glob, struct, csv
+from datetime import date
 from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOT = f'{ROOT}/screenshots'
@@ -67,8 +68,8 @@ def check_header(page, label, mobile=False):
     return m
 HANGUL = re.compile(r'[가-힣]')
 KANA = re.compile(r'[\u3040-\u30ff]')
-RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit|act|fit|fsrc|rtarget|hub|wx|compass)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
-SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js', 'hub.js', 'weather.js']
+RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit|act|fit|fsrc|rtarget|hub|wx|compass|rc)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
+SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js', 'hub.js', 'weather.js', 'receipt.js']
 def open_card(page, cid='compass'):
     page.evaluate('(id)=>XA.openCard(id)', cid)
     page.wait_for_selector('#card-view:not([hidden])')
@@ -99,17 +100,16 @@ def home_fold(page, vw, vh, label):
         stripTop: strip.top,
         lastBottom: last,
         vh: window.innerHeight,
-        pairRows: uniq(tops('.hub-cat[data-cat="analyze"] .hub-card, .hub-cat[data-cat="fun"] .hub-card')).length,
+        analyzeRows: uniq(tops('.hub-cat[data-cat="analyze"] .hub-card')).length,
+        funRows: uniq(tops('.hub-cat[data-cat="fun"] .hub-card')).length,
+        funN: document.querySelectorAll('.hub-cat[data-cat="fun"] .hub-card').length,
         soonRows: uniq(tops('.hub-cat[data-cat="soon"] .hub-card')).length,
         soonN: document.querySelectorAll('.hub-cat[data-cat="soon"] .hub-card').length
       };
     }""")
     check(box['n'] == 5 and box['boardTop'] >= box['leadTop'] - 1 and box['stripTop'] > box['boardTop'], f'{label} 카드가 한 줄 소개 다음, CSV 줄보다 위 {box}')
     check(box['lastBottom'] <= box['vh'] + 1, f'{label} 카드 전부가 첫 화면 안 bottom={box["lastBottom"]:.0f} vh={vh}')
-    if vw >= 1000:
-        check(box['pairRows'] == 1 and box['soonRows'] == 1 and box['soonN'] == 3, f'{label} 데스크톱은 나침반·날씨가 한 줄, 준비 중 3장이 한 줄 {box}')
-    else:
-        check(box['pairRows'] == 1 and box['soonRows'] == 2, f'{label} 좁은 화면은 한 줄에 1~2장 {box}')
+    check(box['funN'] == 2 and box['soonN'] == 2 and box['funRows'] == 1 and box['soonRows'] == 1 and box['analyzeRows'] == 1, f'{label} 재미 2장·준비 중 2장이 각각 한 줄 {box}')
     return box
 
 # ---------- 정적 검사: 실제 데이터 흔적 ----------
@@ -144,6 +144,99 @@ og_raw = open(og_path, 'rb').read()
 og_w, og_h = struct.unpack('>II', og_raw[16:24])
 check(og_raw[:8] == b'\x89PNG\r\n\x1a\n' and og_w == 1200 and og_h == 630 and len(og_raw) < 1_000_000, f'og-image {og_w}x{og_h} {len(og_raw)}B')
 
+MONTHS = {m: i for i, m in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
+def parse_csv_date(s):
+    m = re.search(r'([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})', s or '')
+    if m and MONTHS.get(m.group(1)[:3].title()):
+        return date(int(m.group(3)), MONTHS[m.group(1)[:3].title()], int(m.group(2)))
+    m = re.search(r'(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})', s or '')
+    if m:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+def read_rows(path):
+    with open(os.path.join(ROOT, path), encoding='utf-8', newline='') as f:
+        return list(csv.reader(f))
+def num_cell(raw):
+    raw = (raw or '').strip().replace(',', '')
+    if raw in ('', '-', '—'):
+        return 0.0
+    return float(raw)
+def content_expected(path):
+    rows = read_rows(path)
+    head = [h.strip() for h in rows[0]]
+    ix = {h: i for i, h in enumerate(head)}
+    cols = {'Impressions': 'imp', 'Likes': 'likes', 'Reposts': 'rt', 'Replies': 'rep', 'Bookmarks': 'bm', 'Profile visits': 'prof', 'New follows': 'nf'}
+    sums = {k: 0.0 for k in cols.values()}
+    by = {}
+    handles = {}
+    best = None
+    n = 0
+    for r in rows[1:]:
+        if not any(c.strip() for c in r):
+            continue
+        imp = num_cell(r[ix['Impressions']])
+        likes = num_cell(r[ix['Likes']])
+        text = r[ix['Post text']] if 'Post text' in ix else ''
+        if not (imp > 0 or likes > 0 or text.strip()):
+            continue
+        n += 1
+        for name, key in cols.items():
+            if name in ix:
+                sums[key] += num_cell(r[ix[name]])
+        d = parse_csv_date(r[ix['Date']]) if 'Date' in ix else None
+        if d:
+            by[d] = by.get(d, 0.0) + imp
+        link = r[ix['Post Link']] if 'Post Link' in ix else ''
+        hm = re.search(r'https?://(?:www\.)?(?:x|twitter)\.com/([^/?#]+)/status/', link, re.I)
+        if hm and hm.group(1).lower() not in ('i', 'intent', 'share', 'home', 'search'):
+            handles[hm.group(1)] = handles.get(hm.group(1), 0) + 1
+        if best is None or imp > best[0] or (imp == best[0] and n < best[2]):
+            best = (imp, text, n)
+    handle, best_n = '', 0
+    for h, c in handles.items():
+        if c > best_n:
+            handle, best_n = h, c
+    snippet = ''
+    if best:
+        line = next((s.strip() for s in best[1].splitlines() if s.strip()), '')
+        line = re.sub(r'https?://\S+', '', line)
+        line = re.sub(r'\s+', ' ', line).strip()
+        chars = list(line)
+        snippet = line if len(chars) <= 32 else ''.join(chars[:32]) + '…'
+    best_day = min((d for d, q in by.items() if q == max(by.values()))) if by else None
+    return {
+        'sums': sums, 'n': n, 'handle': handle, 'snippet': snippet, 'by': by,
+        'best_day': best_day, 'best_qty': by.get(best_day) if best_day else None,
+        'period': (min(by), max(by)) if by else None,
+    }
+def overview_expected(path):
+    rows = read_rows(path)
+    head = [h.strip() for h in rows[0]]
+    ix = {h: i for i, h in enumerate(head)}
+    cols = {'노출수': 'imp', '마음에 들어요': 'likes', '재게시': 'rt', '답글': 'rep', '북마크': 'bm', '프로필 조회수': 'prof', '새로운 팔로우': 'nf'}
+    parsed = []
+    for r in rows[1:]:
+        if not any(c.strip() for c in r):
+            continue
+        d = parse_csv_date(r[ix['Date']])
+        if not d:
+            continue
+        rec = {'date': d, 'posts': num_cell(r[ix['게시물 작성하기']])}
+        for name, key in cols.items():
+            rec[key] = num_cell(r[ix[name]])
+        parsed.append(rec)
+    parsed.sort(key=lambda x: x['date'])
+    start = next(i for i, x in enumerate(parsed) if x['posts'] > 0) if any(x['posts'] > 0 for x in parsed) else 0
+    sums = {k: sum(x[k] for x in parsed) for k in cols.values()}
+    act = {k: sum(x[k] for x in parsed[start:]) for k in cols.values()}
+    return {'sums': sums, 'act': act, 'n': len(parsed), 'start': start, 'period': (parsed[0]['date'], parsed[-1]['date'])}
+def ymd_py(d):
+    return f'{d.year}.{d.month:02d}.{d.day:02d}'
+def grouped(n):
+    return f'{int(round(n)):,}'
+SAMPLE_RC = content_expected('sample.csv')
+OV_RC = overview_expected('sample_overview.csv')
+
 try:
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -168,9 +261,11 @@ try:
         used = set()
         for f in ['index.html', 'privacy.html']:
             used |= set(re.findall(r'data-i18n(?:-html|-placeholder|-title)?="([^"]+)"', open(os.path.join(ROOT, f), encoding='utf-8').read()))
-        for f in ['app.js', 'diag.js', 'overview.js', 'i18n.js', 'hub.js', 'weather.js']:
+        for f in ['app.js', 'diag.js', 'overview.js', 'i18n.js', 'hub.js', 'weather.js', 'receipt.js']:
             src = open(os.path.join(ROOT, f), encoding='utf-8').read()
             used |= set(re.findall(r"\bt\('([\w.]+)'", src)) | set(re.findall(r"XA\.err\('([\w.]+)'", src)) | set(re.findall(r"'(diag\.grade\.[abcd])'", src))
+            if f == 'receipt.js':
+                used |= set(re.findall(r"'((?:rc|hub)\.[A-Za-z0-9_.]+)'", src))
         dyn = pg.evaluate("""(()=>{const k=[];XA.CATS.concat(['reply']).forEach(c=>k.push('cat.'+c));XA.HOOKS.forEach(h=>k.push('hook.'+h[0]));Object.keys(XA.ALIAS).forEach(c=>k.push('col.'+c));
           for(let d=0;d<7;d++){k.push('day.'+d,'dayFull.'+d)};['cat','n','share','medImp','avgLikes','avgBm','er','br','nfr','prof','hook','used','hookImp','hookLikes','hookBr','lift'].forEach(x=>k.push('th.'+x));
           ['dow','days','imp','eng','bm','net','posts','bucket','medImp','ipp','medNet','er'].forEach(x=>k.push('ov.th.'+x));['0','1to3','4plus'].forEach(x=>k.push('ov.bucket.'+x));
@@ -219,14 +314,16 @@ try:
             cardHidden: document.getElementById('card-view').hidden };
         }""")
         ids = [m['id'] for m in home0['mods']]
-        check(ids == ['compass', 'weather', 'soon-calendar', 'soon-hooks', 'soon-quote'], f'카드 등록 순서 {ids}')
+        check(ids == ['compass', 'weather', 'receipt', 'soon-calendar', 'soon-hooks'], f'카드 등록 순서 {ids}')
         check([m['order'] for m in home0['mods']] == [1, 2, 3, 4, 5], '카드 번호 1부터')
-        check(home0['mods'][0]['status'] == 'ready' and home0['mods'][1]['cat'] == 'fun' and sum(1 for m in home0['mods'] if m['status']=='soon') == 3, '나침반·날씨·준비중 3장')
+        check(home0['mods'][0]['status'] == 'ready' and home0['mods'][1]['cat'] == 'fun' and home0['mods'][2]['id'] == 'receipt' and home0['mods'][2]['cat'] == 'fun' and sum(1 for m in home0['mods'] if m['status']=='soon') == 2, '나침반·날씨·영수증·준비중 2장')
         check(home0['dup'] is False and home0['added'] is True and home0['back'] == 5, f"등록은 한 번만, 테스트 카드는 지움 {home0['dup']} {home0['n']}→{home0['back']}")
         check(not home0['miss'], f"카드 문구 키가 ko/en/ja에 있음 {home0['miss'][:8]}")
         check(home0['cats'] == ['analyze', 'fun', 'soon'] and home0['lang'] and home0['home'] and home0['cardHidden'], f"홈 분류·언어 버튼 {home0['cats']}")
         check([c['num'] for c in home0['cards']] == ['01', '02', '03', '04', '05'], f"카드 번호 표시 {[c['num'] for c in home0['cards']]}")
-        check(all(c['dis'] for c in home0['cards'] if c['id'].startswith('soon')) and not any(c['dis'] for c in home0['cards'] if c['id'] in ('compass', 'weather')), '준비 중 카드만 비활성')
+        check(all(c['dis'] for c in home0['cards'] if c['id'].startswith('soon')) and not any(c['dis'] for c in home0['cards'] if c['id'] in ('compass', 'weather', 'receipt')), '준비 중 카드만 비활성')
+        rc_need = pg.inner_text('.hub-card[data-mod="receipt"]')
+        check('내 X 영수증' in rc_need and '노출' in rc_need and '없는 칸' in rc_need, f'영수증 카드에 필요한 칸을 적어 둠 {rc_need[:140]}')
         pg.click('.hub-card[data-mod="weather"]')
         ask = pg.inner_text('#hub-ask')
         check(pg.evaluate("document.getElementById('card-view').hidden === true") and not pg.locator('#hub-ask').is_hidden() and 'CSV' in ask and '말투 날씨 예보' in ask, f'CSV 없으면 들어가지 않고 다음 단계를 안내 {ask[:80]}')
@@ -241,14 +338,14 @@ try:
         check(pg.evaluate("!document.getElementById('home').hidden && document.getElementById('card-view').hidden"), '홈으로 돌아옴')
         pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
         en_home = pg.inner_text('#home')
-        check(pg.evaluate("document.documentElement.lang")=='en' and not HANGUL.search(en_home) and 'Tone weather' in en_home and 'Coming soon' in en_home and 'Try with the example' in en_home and 'Load a CSV' in en_home, f'홈 EN 즉시 반영 {HANGUL.findall(en_home)[:6]}')
+        check(pg.evaluate("document.documentElement.lang")=='en' and not HANGUL.search(en_home) and 'Tone weather' in en_home and 'My X receipt' in en_home and 'Coming soon' in en_home and 'Try with the example' in en_home and 'Load a CSV' in en_home, f'홈 EN 즉시 반영 {HANGUL.findall(en_home)[:6]}')
         check(pg.locator('header [data-lang-toggle]').is_visible(), '홈에서 언어 버튼이 보임')
         home_fold(pg, 1280, 800, '1280x800 en')
         pg.screenshot(path=f'{SHOT}/v2_16_home_en.png')
         pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
         pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
         ja_home = pg.inner_text('#home')
-        check(pg.evaluate("document.documentElement.lang")=='ja' and not HANGUL.search(ja_home) and KANA.search(ja_home) and '口調の天気予報' in ja_home and '準備中' in ja_home and '例で試す' in ja_home and 'CSVを読み込む' in ja_home, f'홈 JA 즉시 반영 {HANGUL.findall(ja_home)[:6]}')
+        check(pg.evaluate("document.documentElement.lang")=='ja' and not HANGUL.search(ja_home) and KANA.search(ja_home) and '口調の天気予報' in ja_home and 'レシート' in ja_home and '準備中' in ja_home and '例で試す' in ja_home and 'CSVを読み込む' in ja_home, f'홈 JA 즉시 반영 {HANGUL.findall(ja_home)[:6]}')
         home_fold(pg, 1280, 800, '1280x800 ja')
         pg.screenshot(path=f'{SHOT}/v2_17_home_ja.png')
         pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
@@ -260,7 +357,8 @@ try:
         check(pg.evaluate("document.getElementById('home') && !document.getElementById('home').hidden"), '예시를 넣어도 홈에 머무름')
         st = pg.inner_text('#home-status')
         check('EXAMPLE' in st and 'sample.csv' in st and '✓' in st, f'홈에 파일 이름과 예시 표시 {st}')
-        check('이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="compass"]') and '이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="weather"]'), '올린 뒤 카드가 열 수 있다고 표시')
+        check('이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="compass"]') and '이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="weather"]') and '이 파일로 열 수 있어요' in pg.inner_text('.hub-card[data-mod="receipt"]'), '올린 뒤 카드가 열 수 있다고 표시')
+        check('없는 칸은 빼요' in pg.inner_text('.hub-card[data-mod="receipt"]'), '영수증은 없는 칸을 빼라고 카드에 적음')
         kept_n = pg.evaluate('XA.last.posts.length')
         pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
         home_en = pg.inner_text('#home')
@@ -436,6 +534,163 @@ try:
         check(edge['bom']['ok'] and edge['bom']['text'].startswith('안녕') and edge['en']['ok'] and edge['en']['text']=='Hello there' and edge['ja']['ok'] and 'こんにちは' in edge['ja']['text'] and edge['ko']['n']==1, f"헤더 BOM/ko/en/ja {edge['bom']} {edge['en']} {edge['ja']} {edge['ko']}")
         check(edge['notext']['state']=='blocked' and edge['notext']['key']=='hub.why.noTextCol' and edge['emptyText']['key']=='hub.why.emptyText', f"본문 없음 {edge['notext']} {edge['emptyText']}")
         check(edge['emojiCsv']['state']=='ready', f"이모지 CSV {edge['emojiCsv']}")
+
+        # ---------- 내 X 영수증: 화면 숫자 = CSV 합 ----------
+        pg.set_viewport_size({'width': 1280, 'height': 900})
+        open_card(pg, 'receipt')
+        pg.wait_for_selector('#rc-paper')
+        pg.wait_for_timeout(80)
+        rc = pg.evaluate("""() => {
+          const lines = {};
+          document.querySelectorAll('#rc-paper [data-key]').forEach(el => lines[el.dataset.key] = el.dataset.qty);
+          const notes = [...document.querySelectorAll('#rc-note .rc-note')].map(n => ({id:n.dataset.note, qty:n.dataset.qty||'', text:n.textContent}));
+          const period = document.getElementById('rc-period');
+          return {
+            lines, notes,
+            handle: document.getElementById('rc-handle').textContent,
+            from: period.dataset.from, to: period.dataset.to,
+            hideLine: document.getElementById('rc-hide-line').checked,
+            hideHandle: document.getElementById('rc-hide-handle').checked,
+            note: document.getElementById('rc-note').innerText,
+            paper: document.getElementById('rc-paper').innerText,
+            sample: !!document.querySelector('.rc-flag'),
+            n: XA.last.posts.length,
+            miss: !!document.getElementById('rc-miss')
+          };
+        }""")
+        check(len(SAMPLE_RC['snippet']) > 4 and rc['n'] == SAMPLE_RC['n'], f"예시 글 수 {rc['n']} / CSV {SAMPLE_RC['n']}")
+        for key, qty in SAMPLE_RC['sums'].items():
+            check(rc['lines'].get(key) == str(int(qty)), f'예시 {key} 화면 {rc["lines"].get(key)} CSV {int(qty)}')
+        total = int(round(sum(SAMPLE_RC['sums'].values())))
+        check(rc['lines'].get('total') == str(total) and grouped(total) in rc['paper'], f'예시 합계 {rc["lines"].get("total")} vs {total}')
+        check(rc['from'] == ymd_py(SAMPLE_RC['period'][0]) and rc['to'] == ymd_py(SAMPLE_RC['period'][1]), f"예시 기간 {rc['from']} {rc['to']}")
+        day = next(n for n in rc['notes'] if n['id'] == 'day')
+        check(day['qty'] == str(int(SAMPLE_RC['best_qty'])) and ymd_py(SAMPLE_RC['best_day']) in day['text'], f"잘 보인 날 {day['text']} {day['qty']}")
+        check('@' + SAMPLE_RC['handle'] in rc['handle'] and SAMPLE_RC['handle'] == 'example_creator', f"계정 {rc['handle']}")
+        check(rc['hideLine'] and not rc['hideHandle'] and rc['sample'] and not rc['miss'], '첫 줄 가리기 기본, 계정은 보임, 예시 표시')
+        check(SAMPLE_RC['snippet'] not in rc['paper'], '가린 첫 줄은 영수증에 없음')
+        check('번 스침' in rc['paper'] and '합계' in rc['paper'] and '올려 주셔서' in rc['paper'], '영수증 문구')
+        pg.screenshot(path=f'{SHOT}/v2_25_receipt_ko.png')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
+        enp = pg.inner_text('#rc-paper')
+        check(not HANGUL.search(enp) and 'MY X RECEIPT' in enp and 'glances' in enp and 'THANK YOU FOR POSTING' in enp and pg.get_attribute('#rc-paper [data-key="imp"]', 'data-qty') == str(int(SAMPLE_RC['sums']['imp'])), f'영수증 EN {HANGUL.findall(enp)[:4]}')
+        pg.screenshot(path=f'{SHOT}/v2_26_receipt_en.png')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
+        jap = pg.inner_text('#rc-paper')
+        check(not HANGUL.search(jap) and 'レシート' in jap and 'すれ違い' in jap and pg.get_attribute('#rc-paper [data-key="likes"]', 'data-qty') == str(int(SAMPLE_RC['sums']['likes'])), f'영수증 JA {HANGUL.findall(jap)[:4]}')
+        pg.screenshot(path=f'{SHOT}/v2_27_receipt_ja.png')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(200)
+        pg.uncheck('#rc-hide-line'); pg.wait_for_timeout(40)
+        check(SAMPLE_RC['snippet'] in pg.inner_text('#rc-note') and pg.locator('.rc-note[data-note="line"]').count() == 1, '첫 줄 가리기를 끄면 그 줄이 보임')
+        pg.check('#rc-hide-line'); pg.wait_for_timeout(40)
+        check(SAMPLE_RC['snippet'] not in pg.inner_text('#rc-paper'), '다시 가리면 첫 줄이 사라짐')
+        pg.check('#rc-hide-handle'); pg.wait_for_timeout(40)
+        check(SAMPLE_RC['handle'] not in pg.inner_text('#rc-paper'), '계정 가리기')
+        pg.evaluate("""() => {
+          window.__rcTexts = [];
+          const proto = CanvasRenderingContext2D.prototype;
+          if (!proto.__rcOld) proto.__rcOld = proto.fillText;
+          proto.fillText = function(text) { window.__rcTexts.push(String(text)); return proto.__rcOld.apply(this, arguments); };
+        }""")
+        with pg.expect_download() as di:
+            pg.click('#rc-save')
+        png = open(di.value.path(), 'rb').read()
+        rw, rh = struct.unpack('>II', png[16:24])
+        drawn = '\n'.join(pg.evaluate('window.__rcTexts'))
+        check(png[:8] == b'\x89PNG\r\n\x1a\n' and rw == 1080 and rh >= 1350 and len(png) > 5000, f'영수증 PNG {rw}x{rh} {len(png)}B')
+        check(SAMPLE_RC['handle'] not in drawn and SAMPLE_RC['snippet'] not in drawn and grouped(SAMPLE_RC['sums']['imp']) in drawn, '그림에도 가린 계정·첫 줄이 없고 노출 합은 있음')
+        open(f'{SHOT}/v2_25b_receipt_png.png', 'wb').write(png)
+        pg.evaluate('window.__rcTexts = []')
+        pg.uncheck('#rc-hide-handle'); pg.wait_for_timeout(40)
+        check('@' + SAMPLE_RC['handle'] in pg.inner_text('#rc-handle'), '계정 가리기를 끄면 이름이 돌아옴')
+        with pg.expect_download() as di2:
+            pg.click('#rc-save')
+        drawn2 = '\n'.join(pg.evaluate('window.__rcTexts'))
+        check('@' + SAMPLE_RC['handle'] in drawn2 and SAMPLE_RC['snippet'] not in drawn2, '그림에 계정 이름이 다시 들어가고 첫 줄은 여전히 없음')
+        pg.evaluate("""() => { const p = CanvasRenderingContext2D.prototype; if (p.__rcOld) { p.fillText = p.__rcOld; delete p.__rcOld; } }""")
+        pg.evaluate("""() => {
+          window.__loadReceipt = (csv) => {
+            XA._rcHideSnippet = true;
+            XA._rcHideHandle = false;
+            if (XA.lang !== 'ko') XA.setLang('ko');
+            XA.handleText(csv, false);
+            const err = document.getElementById('csv-error');
+            if (err && !err.hidden) return { error: err.textContent };
+            XA.openCard('receipt');
+            const lines = {};
+            document.querySelectorAll('#rc-paper [data-key]').forEach((el) => { lines[el.dataset.key] = Number(el.dataset.qty); });
+            const notes = [...document.querySelectorAll('#rc-note .rc-note')].map((n) => ({ id: n.dataset.note, qty: n.dataset.qty == null || n.dataset.qty === '' ? null : Number(n.dataset.qty), text: n.textContent }));
+            const period = document.getElementById('rc-period');
+            return {
+              lines, notes,
+              miss: (document.getElementById('rc-miss') || { textContent: '' }).textContent,
+              paper: document.getElementById('rc-paper').innerText,
+              handle: document.getElementById('rc-handle').textContent,
+              from: (period && period.dataset.from) || '',
+              to: (period && period.dataset.to) || '',
+              n: XA.last.mode === 'overview' ? XA.last.days.length : XA.last.posts.length,
+              mode: XA.last.mode || 'content'
+            };
+          };
+        }""")
+        def load_rc(csv):
+            return pg.evaluate('(csv) => window.__loadReceipt(csv)', csv)
+        empty = load_rc('')
+        header_only = load_rc('Post id,Impressions\n')
+        check('데이터 줄' in empty.get('error', '') and '데이터 줄' in header_only.get('error', ''), f"빈 CSV {empty.get('error','')} / {header_only.get('error','')}")
+        blocked = pg.evaluate("""() => {
+          const a = XA.receiptModel({ map: { imp: 0 }, posts: [], mode: 'content' });
+          const b = XA.receiptModel({ map: {}, posts: [{ imp: 3, text: 'x' }], mode: 'content' });
+          return { a: a && a.key, aLines: (a && a.lines) || null, b: b && b.key, bLines: (b && b.lines) || null };
+        }""")
+        check(blocked['a'] == 'rc.why.empty' and blocked['aLines'] is None and blocked['b'] == 'rc.why.noImp' and blocked['bLines'] is None, f'빈 결과·노출 없음은 숫자를 만들지 않음 {blocked}')
+        one = load_rc('Post id,Date,Post text,Post Link,Impressions,Likes,Reposts,Replies,Bookmarks,Profile visits,New follows\n9,2026-08-08 21:05,only row,https://x.com/solo_user/status/9,7,6,5,4,3,2,1\n')
+        check(one.get('lines') == {'imp': 7, 'likes': 6, 'rt': 5, 'rep': 4, 'bm': 3, 'prof': 2, 'nf': 1, 'total': 28}, f"한 줄 {one.get('lines')}")
+        check(one.get('from') == '2026.08.08' and one.get('to') == '2026.08.08' and '@solo_user' in one.get('handle', ''), f"한 줄 기간·계정 {one.get('from')} {one.get('handle')}")
+        check(any(n['id'] == 'hour' and n['qty'] == 1 and '21시' in n['text'] for n in one.get('notes', [])), f"한 줄 시간 {one.get('notes')}")
+        huge = load_rc('Post id,Post text,Impressions,Likes\n1,big,1234567890,1000000\n')
+        check(huge.get('lines', {}).get('imp') == 1234567890 and huge.get('lines', {}).get('likes') == 1000000 and huge.get('lines', {}).get('total') == 1235567890, f"큰 수 {huge.get('lines')}")
+        check('1,234,567,890' in huge.get('paper', '') and '1,235,567,890' in huge.get('paper', '') and huge.get('from') == '', '큰 수 묶음 표기, 날짜 칸 없음')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(150)
+        huge_en = pg.inner_text('#rc-paper')
+        check('1,234,567,890' in huge_en and 'glances' in huge_en and not HANGUL.search(huge_en), f'큰 수 EN {HANGUL.findall(huge_en)[:3]}')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(150)
+        huge_ja = pg.inner_text('#rc-paper')
+        check('1,234,567,890' in huge_ja and 'すれ違い' in huge_ja and not HANGUL.search(huge_ja), f'큰 수 JA {HANGUL.findall(huge_ja)[:3]}')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
+        bom = load_rc('\ufeff게시물 ID,날짜,게시물 본문,노출수,마음에 들어요,재게시\n1,2026-01-03,안녕하세요,10,2,0\n')
+        enr = load_rc('Post id,Date,Post text,Impressions,Likes,Reposts\n1,2026-01-03,Hello,10,2,0\n')
+        jar = load_rc('ポストID,日付,ポスト本文,インプレッション,いいね,リポスト\n1,2026-01-03,こんにちは,10,2,0\n')
+        for name, got in (('bom', bom), ('en', enr), ('ja', jar)):
+            check(got.get('lines') == {'imp': 10, 'likes': 2, 'rt': 0, 'total': 12}, f"{name} 헤더 합 {got.get('lines')} {got.get('error')}")
+            check('번 보관' not in got.get('paper', '') and '답글' in got.get('miss', '') and '북마크' in got.get('miss', ''), f'{name} 없는 칸을 0으로 안 적음')
+        emo = '😂🔥✨🎉😊🌸👍💡🚀🎵'
+        first = emo * 4 + 'ENDSHOULDNOTSHOW'
+        snip = first[:32] + '…'
+        emo_csv = 'Post id,Date,Post text,Post Link,Impressions,Likes\n1,2026-05-01 11:00,"' + first + '\nSECRET-SECOND-LINE",https://x.com/hide_me/status/1,50,3\n2,2026-05-02 11:00,smaller,https://x.com/i/status/2,10,1\n'
+        em = load_rc(emo_csv)
+        check(em.get('lines', {}).get('imp') == 60 and em.get('lines', {}).get('likes') == 4 and '@hide_me' in em.get('handle', '') and '@i' not in em.get('handle', ''), f"이모지 합·계정 {em.get('lines')} {em.get('handle')}")
+        check('SECRET-SECOND-LINE' not in em.get('paper', '') and 'ENDSHOULDNOTSHOW' not in em.get('paper', '') and snip not in em.get('paper', ''), '긴 첫 줄·둘째 줄은 기본으로 안 보임')
+        pg.uncheck('#rc-hide-line'); pg.wait_for_timeout(40)
+        emo_note = pg.inner_text('#rc-note')
+        check(snip in emo_note and 'SECRET-SECOND-LINE' not in emo_note and 'ENDSHOULDNOTSHOW' not in emo_note, '32글자만 보이고 둘째 줄은 없음')
+        pg.check('#rc-hide-handle'); pg.wait_for_timeout(40)
+        check('hide_me' not in pg.inner_text('#rc-paper'), '이모지 예에서 계정 가리기')
+        tie_h = load_rc('Post id,Date,Post text,Impressions\na,2026-04-01 08:00,aa,1\nb,2026-04-01 08:10,bb,1\nc,2026-04-01 18:00,cc,1\nd,2026-04-01 18:20,dd,1\n')
+        hour_note = next(n['text'] for n in tie_h.get('notes', []) if n['id'] == 'hour')
+        check('시간은 8시' in hour_note and '18시' not in hour_note and next(n['qty'] for n in tie_h['notes'] if n['id'] == 'hour') == 2, f'같은 개수면 더 이른 시간 {hour_note}')
+        tie_d = load_rc('Post id,Date,Post text,Impressions\na,2026-04-01 08:00,aa,5\nb,2026-04-02 08:00,bb,5\n')
+        day_note = next(n for n in tie_d.get('notes', []) if n['id'] == 'day')
+        check(day_note['qty'] == 5 and '2026.04.01' in day_note['text'] and '2026.04.02' not in day_note['text'], f"같은 노출이면 더 이른 날 {day_note}")
+        ov = pg.evaluate("window.__loadReceipt(XA.SAMPLES['sample_overview.csv'])")
+        check(ov.get('mode') == 'overview' and ov.get('n') == OV_RC['n'], f"개요 일수 {ov.get('n')} vs {OV_RC['n']}")
+        for key, qty in OV_RC['sums'].items():
+            check(ov.get('lines', {}).get(key) == int(qty), f'개요 {key} 화면 {ov.get("lines", {}).get(key)} CSV {int(qty)}')
+        check(ov.get('lines', {}).get('total') == int(round(sum(OV_RC['sums'].values()))), f"개요 합계 {ov.get('lines', {}).get('total')}")
+        check(int(OV_RC['sums']['imp']) != int(OV_RC['act']['imp']) and ov.get('lines', {}).get('imp') == int(OV_RC['sums']['imp']), '개요는 앞쪽 준비 기간도 더함')
+        check(ov.get('from') == ymd_py(OV_RC['period'][0]) and ov.get('to') == ymd_py(OV_RC['period'][1]) and '@' not in ov.get('handle', ''), f"개요 기간 {ov.get('from')} {ov.get('to')} {ov.get('handle')}")
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(80)
+
         pg.evaluate("XA.handleText('Post id,Date,Impressions\\n1979000000000000001,2026-01-02,10\\n', false)")
         pg.evaluate('XA.closeCard()')
         why = pg.inner_text('.hub-card[data-mod="weather"]')
@@ -664,10 +919,13 @@ try:
         fp.on('request', lambda r: (not r.url.startswith('file://')) and not r.url.startswith('data:') and freq.append(r.url))
         fp.goto(FILE_URL); fp.click('#btn-sample'); fp.wait_for_selector('#results:not([hidden])', state='attached', timeout=5000); fp.wait_for_timeout(500)
         ok1 = fp.evaluate('XA.last.posts.length') == 94
+        open_card(fp, 'receipt'); fp.wait_for_selector('#rc-paper')
+        ok_rc = fp.get_attribute('#rc-paper [data-key="imp"]', 'data-qty') == str(int(SAMPLE_RC['sums']['imp']))
+        fp.click('#back-home')
         fp.click('#btn-sample-ov'); fp.wait_for_selector('#overview:not([hidden])', state='attached', timeout=5000)
         fp.set_input_files('#file', f'{ROOT}/sample.csv'); fp.wait_for_selector('#results:not([hidden])', state='attached', timeout=5000)
         fp.click('.tab[data-tab=help]'); fp.click('[data-lang-toggle] button[data-lang=en]')
-        check(ok1 and not ferr and not freq and fp.evaluate('document.documentElement.lang') == 'en', f'file:// 로 열어도 샘플·업로드·언어 전환 동작 (에러 {ferr}, 외부요청 {freq})')
+        check(ok1 and ok_rc and not ferr and not freq and fp.evaluate('document.documentElement.lang') == 'en', f'file:// 로 열어도 샘플·업로드·언어 전환·영수증 동작 (에러 {ferr}, 외부요청 {freq})')
         fp.close()
 
         # ---------- 실제 개요 CSV (스크린샷 없음) ----------
@@ -777,6 +1035,10 @@ try:
         open_card(s, 'weather'); s.wait_for_timeout(200)
         ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 날씨 가로 넘침 없음 ({ow})')
         s.screenshot(path=f'{SHOT}/v2_23b_weather_360.png')
+        s.click('#back-home'); open_card(s, 'receipt'); s.wait_for_timeout(200)
+        ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 영수증 가로 넘침 없음 ({ow})')
+        check(s.locator('#rc-hide-line').is_checked() and s.get_attribute('#rc-paper [data-key="imp"]', 'data-qty') == str(int(SAMPLE_RC['sums']['imp'])), '360 영수증 숫자가 CSV와 같고 첫 줄은 가려져 있음')
+        s.screenshot(path=f'{SHOT}/v2_28_receipt_360.png')
         s.click('#back-home'); open_card(s, 'compass'); s.wait_for_timeout(200)
         ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 나침반 가로 넘침 없음 ({ow})')
         s.screenshot(path=f'{SHOT}/v2_24_compass_360.png')
