@@ -38,7 +38,7 @@
         <span data-i18n="brand.name">계정 나침반</span> <span class="tag" data-i18n="brand.tag">비공식 · 무료</span></div>
       <div class="lang" data-lang-toggle role="group" aria-label="Language"></div>
       <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="csv" role="tab" aria-selected="true" data-i18n="tab.csv">📊 CSV 분석</button>
+        <button class="tab active" data-tab="csv" role="tab" aria-selected="true" data-i18n="tab.csv">🏠 홈</button>
         <button class="tab" data-tab="diag" role="tab" aria-selected="false" data-i18n="tab.diag">📝 복붙 진단</button>
         <button class="tab" data-tab="help" role="tab" aria-selected="false" data-i18n="tab.help">❓ 사용법</button>
       </nav>
@@ -48,8 +48,9 @@
 <noscript><div class="wrap"><div class="alert">이 도구는 JavaScript가 필요해요. / This tool needs JavaScript. / このツールにはJavaScriptが必要です。</div></div></noscript>
 
 <main class="wrap">
-  <!-- CSV 분석 -->
+  <!-- 홈: CSV 한 번, 카드 여러 장 -->
   <section id="tab-csv" class="panel active">
+    <div id="home">
     <div class="hero card">
       <h1 data-i18n="hero.h1"></h1>
       <p data-i18n-html="hero.p"></p>
@@ -71,10 +72,16 @@
       <p class="muted small unofficial" data-i18n="notice.unofficial"></p>
       <div id="csv-error" class="alert" hidden></div>
     </div>
+    <div id="home-status" class="banner info" aria-live="polite" hidden></div>
+    <div id="hub-board"></div>
+    </div>
 
-    <div id="overview" hidden></div>
-
-    <div id="results" hidden>
+    <div id="card-view" hidden>
+      <button type="button" class="btn ghost back-home" id="back-home" data-i18n="hub.back">← 홈으로</button>
+      <div id="card-compass" data-card="compass" hidden>
+        <div id="compass-empty" class="card"><p data-i18n="compass.empty"></p></div>
+        <div id="overview" hidden></div>
+        <div id="results" hidden>
       <div id="sample-banner" class="banner" hidden data-i18n-html="results.sampleBanner"></div>
       <div id="col-info" class="muted small col-info"></div>
 
@@ -84,37 +91,64 @@
       <div id="actions" class="actions"></div>
       </div>
 
+      <div id="reply-box" class="banner info" hidden></div>
+
+      <p class="muted small" data-i18n="hub.moreHint"></p>
+      <div id="compass-nav" class="compass-nav" role="group">
+        <button type="button" data-sec="follow" aria-expanded="false" data-i18n="hub.sec.follow"></button>
+        <button type="button" data-sec="fit" aria-expanded="false" data-i18n="hub.sec.fit"></button>
+        <button type="button" data-sec="replies" aria-expanded="false" data-i18n="hub.sec.replies"></button>
+        <button type="button" data-sec="summary" aria-expanded="false" data-i18n="hub.sec.summary"></button>
+        <button type="button" data-sec="ideas" aria-expanded="false" data-i18n="hub.sec.ideas"></button>
+        <button type="button" data-sec="cats" aria-expanded="false" data-i18n="hub.sec.cats"></button>
+        <button type="button" data-sec="rank" aria-expanded="false" data-i18n="hub.sec.rank"></button>
+        <button type="button" data-sec="heat" aria-expanded="false" data-i18n="hub.sec.heat"></button>
+      </div>
+
+      <div id="sec-follow" class="csec" hidden>
       <div id="follow-block">
       <h2 data-i18n="results.h.fsrc"></h2>
       <div id="follow-src"></div>
       </div>
+      </div>
 
-      <div id="reply-box" class="banner info" hidden></div>
-
-      <h2 data-i18n="results.h.summary"></h2>
-      <div id="summary" class="kpis"></div>
-
+      <div id="sec-fit" class="csec" hidden>
       <div id="fit-block">
       <h2 data-i18n="results.h.fit"></h2>
       <div id="fit"></div>
       </div>
+      </div>
 
+      <div id="sec-replies" class="csec" hidden>
       <div id="rtarget-block">
       <h2 data-i18n="results.h.rtarget"></h2>
       <div id="rtarget"></div>
       </div>
+      </div>
 
+      <div id="sec-summary" class="csec" hidden>
+      <h2 data-i18n="results.h.summary"></h2>
+      <div id="summary" class="kpis"></div>
+      </div>
+
+      <div id="sec-ideas" class="csec" hidden>
       <h2 data-i18n="results.h.suggest"></h2>
       <div id="suggest" class="cards2"></div>
-
       <h2 data-i18n="results.h.series"></h2>
       <div id="series" class="cards3"></div>
+      </div>
 
+      <div id="sec-cats" class="csec" hidden>
       <h2 data-i18n="results.h.cat"></h2>
       <p class="muted small" data-i18n="results.catNote"></p>
       <div id="cat-chart" class="chart"></div>
       <div class="tbl-wrap"><table id="cat-table" class="tbl"></table></div>
+      <h2 data-i18n="results.h.hooks"></h2>
+      <p class="muted small" data-i18n="results.hookNote"></p>
+      <div class="tbl-wrap"><table id="hook-table" class="tbl"></table></div>
+      </div>
 
+      <div id="sec-rank" class="csec" hidden>
       <h2 data-i18n="results.h.rank"></h2>
       <div class="row gap wrap-row">
         <label class="small"><span data-i18n="rank.by"></span>
@@ -133,6 +167,9 @@
         <div class="card"><h3 data-i18n="rank.bottom"></h3><ol id="bottom5" class="posts"></ol></div>
       </div>
 
+      </div>
+
+      <div id="sec-heat" class="csec" hidden>
       <h2 data-i18n="results.h.heat"></h2>
       <div class="row gap wrap-row">
         <label class="small"><span data-i18n="heat.by"></span>
@@ -147,11 +184,12 @@
       <div id="heatmap" class="heat-wrap"></div>
       <div id="hour-blocks" class="chart"></div>
 
-      <h2 data-i18n="results.h.hooks"></h2>
-      <p class="muted small" data-i18n="results.hookNote"></p>
-      <div class="tbl-wrap"><table id="hook-table" class="tbl"></table></div>
+      </div>
 
       <p class="muted small foot-note" data-i18n="results.footnote"></p>
+        </div>
+      </div>
+      <div id="card-dynamic" hidden></div>
     </div>
   </section>
 
@@ -383,5 +421,7 @@
 <script src="app.js"></script>
 <script src="diag.js"></script>
 <script src="overview.js"></script>
+<script src="hub.js"></script>
+<script src="weather.js"></script>
 </body>
 </html>

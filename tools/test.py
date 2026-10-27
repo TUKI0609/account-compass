@@ -67,8 +67,17 @@ def check_header(page, label, mobile=False):
     return m
 HANGUL = re.compile(r'[가-힣]')
 KANA = re.compile(r'[\u3040-\u30ff]')
-RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit|act|fit|fsrc|rtarget)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
-SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js']
+RAWKEY = re.compile(r'\b(?:ov|sug|diag|kpi|col|cat|hook|th|series|heat|rank|howto|ill|privacy|err|results|reply|unit|metric|colinfo|notice|credit|act|fit|fsrc|rtarget|hub|wx|compass)\.[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*\b')
+SITE_FILES = ['index.html', 'privacy.html', 'style.css', 'i18n.js', 'app.js', 'diag.js', 'overview.js', 'samples.js', 'hub.js', 'weather.js']
+def open_card(page, cid='compass'):
+    page.evaluate('(id)=>XA.openCard(id)', cid)
+    page.wait_for_selector('#card-view:not([hidden])')
+    page.wait_for_timeout(40)
+def open_sec(page, sid):
+    hidden = page.locator(f'#sec-{sid}').get_attribute('hidden')
+    if hidden is not None:
+        page.click(f'#compass-nav button[data-sec="{sid}"]')
+    page.wait_for_selector(f'#sec-{sid}:not([hidden])', state='attached')
 
 # ---------- 정적 검사: 실제 데이터 흔적 ----------
 scan = SITE_FILES + ['README.md', 'NOTES.md', 'sample.csv', 'sample_overview.csv', 'tools/gen_sample.py', 'tools/gen_sample_overview.py', 'tools/build_samples.py']
@@ -105,7 +114,7 @@ check(og_raw[:8] == b'\x89PNG\r\n\x1a\n' and og_w == 1200 and og_h == 630 and le
 try:
     with sync_playwright() as p:
         b = p.chromium.launch()
-        ctx = b.new_context(viewport={'width': 1280, 'height': 900}, device_scale_factor=1)
+        ctx = b.new_context(viewport={'width': 1280, 'height': 900}, device_scale_factor=1, accept_downloads=True)
         pg = ctx.new_page()
         errs, ext = [], []
         pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
@@ -126,7 +135,7 @@ try:
         used = set()
         for f in ['index.html', 'privacy.html']:
             used |= set(re.findall(r'data-i18n(?:-html|-placeholder|-title)?="([^"]+)"', open(os.path.join(ROOT, f), encoding='utf-8').read()))
-        for f in ['app.js', 'diag.js', 'overview.js', 'i18n.js']:
+        for f in ['app.js', 'diag.js', 'overview.js', 'i18n.js', 'hub.js', 'weather.js']:
             src = open(os.path.join(ROOT, f), encoding='utf-8').read()
             used |= set(re.findall(r"\bt\('([\w.]+)'", src)) | set(re.findall(r"XA\.err\('([\w.]+)'", src)) | set(re.findall(r"'(diag\.grade\.[abcd])'", src))
         dyn = pg.evaluate("""(()=>{const k=[];XA.CATS.concat(['reply']).forEach(c=>k.push('cat.'+c));XA.HOOKS.forEach(h=>k.push('hook.'+h[0]));Object.keys(XA.ALIAS).forEach(c=>k.push('col.'+c));
@@ -155,9 +164,77 @@ try:
 
         # ---------- 홈 스크린샷 ----------
         pg.screenshot(path=f'{SHOT}/v2_01_home_ko.png')
+        pg.screenshot(path=f'{SHOT}/v2_15_home_ko.png')
+
+        # ---------- 홈 카드 모음 (CSV 올리기 전) ----------
+        home0 = pg.evaluate("""() => {
+          const mods = XA.modules.map(m => ({id:m.id, order:m.order, cat:m.category, status:m.status, title:m.titleKey, desc:m.descKey, needs:m.needsKey}));
+          const dup = XA.registerModule({id:'compass', order:1, category:'analyze', status:'ready', titleKey:'hub.back', descKey:'hub.back', needsKey:'hub.needs.compass'});
+          const added = XA.registerModule({id:'zz-test', order:9, category:'soon', status:'soon', titleKey:'hub.card.soonCal.t', descKey:'hub.card.soonCal.d', needsKey:'hub.needs.soonCal', requires:['text']});
+          const n = XA.modules.length;
+          XA.unregisterModule('zz-test');
+          const miss = [];
+          XA.modules.forEach(m => ['titleKey','descKey','needsKey'].forEach(k => ['ko','en','ja'].forEach(l => { if (!XA.I18N[l][m[k]]) miss.push(l+':'+m[k]); })));
+          XA.hubCategories.forEach(c => ['ko','en','ja'].forEach(l => { if (!XA.I18N[l][c.titleKey]) miss.push(l+':'+c.titleKey); }));
+          const cards = [...document.querySelectorAll('#hub-board .hub-card')].map(b => ({id:b.dataset.mod, dis:b.disabled, num:(b.querySelector('.num')||{}).textContent||''}));
+          const cats = [...document.querySelectorAll('#hub-board .hub-cat')].map(s => s.dataset.cat);
+          return { mods, dup, added, n, back: XA.modules.length, miss, cards, cats,
+            lang: !!document.querySelector('header [data-lang-toggle]'),
+            home: !document.getElementById('home').hidden,
+            cardHidden: document.getElementById('card-view').hidden };
+        }""")
+        ids = [m['id'] for m in home0['mods']]
+        check(ids == ['compass', 'weather', 'soon-calendar', 'soon-hooks', 'soon-quote'], f'카드 등록 순서 {ids}')
+        check([m['order'] for m in home0['mods']] == [1, 2, 3, 4, 5], '카드 번호 1부터')
+        check(home0['mods'][0]['status'] == 'ready' and home0['mods'][1]['cat'] == 'fun' and sum(1 for m in home0['mods'] if m['status']=='soon') == 3, '나침반·날씨·준비중 3장')
+        check(home0['dup'] is False and home0['added'] is True and home0['back'] == 5, f"등록은 한 번만, 테스트 카드는 지움 {home0['dup']} {home0['n']}→{home0['back']}")
+        check(not home0['miss'], f"카드 문구 키가 ko/en/ja에 있음 {home0['miss'][:8]}")
+        check(home0['cats'] == ['analyze', 'fun', 'soon'] and home0['lang'] and home0['home'] and home0['cardHidden'], f"홈 분류·언어 버튼 {home0['cats']}")
+        check([c['num'] for c in home0['cards']] == ['01', '02', '03', '04', '05'], f"카드 번호 표시 {[c['num'] for c in home0['cards']]}")
+        check(all(c['dis'] for c in home0['cards'] if c['id'].startswith('soon')) and not any(c['dis'] for c in home0['cards'] if c['id'] in ('compass', 'weather')), '준비 중 카드만 비활성')
+        pg.click('.hub-card[data-mod="soon-calendar"]', force=True)
+        check(pg.evaluate("document.getElementById('card-view').hidden === true"), '준비 중 카드는 열리지 않음')
+        pg.evaluate("XA.openCard('soon-hooks')")
+        check(pg.evaluate("document.getElementById('card-view').hidden === true"), '준비 중은 함수로 열어도 들어가지 않음')
+        open_card(pg, 'weather')
+        w0 = pg.inner_text('#card-dynamic')
+        check('예보를 만들지 않았' not in w0 and '°C' not in w0 and ('CSV' in w0 or '올려' in w0), f'파일 없을 때 날씨는 숫자를 만들지 않음 {w0[:80]}')
+        pg.click('#back-home')
+        check(pg.evaluate("!document.getElementById('home').hidden && document.getElementById('card-view').hidden"), '홈으로 돌아옴')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
+        en_home = pg.inner_text('#home')
+        check(pg.evaluate("document.documentElement.lang")=='en' and not HANGUL.search(en_home) and 'Tone weather' in en_home and 'Coming soon' in en_home and 'Try with the example' in en_home, f'홈 EN 즉시 반영 {HANGUL.findall(en_home)[:6]}')
+        check(pg.locator('header [data-lang-toggle]').is_visible(), '홈에서 언어 버튼이 보임')
+        pg.screenshot(path=f'{SHOT}/v2_16_home_en.png')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
+        ja_home = pg.inner_text('#home')
+        check(pg.evaluate("document.documentElement.lang")=='ja' and not HANGUL.search(ja_home) and KANA.search(ja_home) and '口調の天気予報' in ja_home and '準備中' in ja_home and '例で試す' in ja_home, f'홈 JA 즉시 반영 {HANGUL.findall(ja_home)[:6]}')
+        pg.screenshot(path=f'{SHOT}/v2_17_home_ja.png')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
+        check(pg.evaluate("XA.last==null && document.documentElement.lang=='ko'"), '언어를 바꿔도 CSV는 그대로 없음, 한국어로 복귀')
 
         # ---------- 샘플 (내장 samples.js) ----------
-        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])'); pg.wait_for_timeout(800)
+        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])', state='attached'); pg.wait_for_timeout(800)
+        check(pg.evaluate("document.getElementById('home') && !document.getElementById('home').hidden"), '예시를 넣어도 홈에 머무름')
+        check('EXAMPLE' in pg.inner_text('#home-status'), '홈에 예시라고 표시')
+        kept_n = pg.evaluate('XA.last.posts.length')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
+        home_en = pg.inner_text('#home')
+        check(pg.evaluate('XA.last.posts.length') == kept_n and pg.evaluate("localStorage.getItem('xa-lang')")=='en', '홈에서 언어를 바꿔도 CSV를 다시 읽지 않음')
+        check('Tone weather' in home_en and 'Coming soon' in home_en and 'Try with the example' in home_en and 'Drag & drop your CSV here' in home_en and 'Analysis & direction' in home_en and 'Not available yet' in home_en and not HANGUL.search(home_en), f'올린 뒤 홈 EN 즉시 반영 {HANGUL.findall(home_en)[:6]}')
+        open_card(pg, 'weather')
+        check('← Home' in pg.inner_text('#back-home') and pg.evaluate("document.documentElement.lang")=='en' and 'For fun' in pg.inner_text('#card-dynamic') and pg.evaluate('XA.last.posts.length')==kept_n, '홈에서 고른 언어가 카드·뒤로가기에도 유지')
+        pg.click('#back-home')
+        check(pg.evaluate("document.documentElement.lang")=='en' and 'Tone weather' in pg.inner_text('#home') and pg.evaluate('XA.last.posts.length')==kept_n, '카드에서 홈으로 돌아와도 언어·CSV 유지')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
+        home_ja = pg.inner_text('#home')
+        check(pg.evaluate('XA.last.posts.length')==kept_n and '口調の天気予報' in home_ja and '準備中' in home_ja and '例で試す' in home_ja and 'CSVファイルをここにドロップするか' in home_ja and not HANGUL.search(home_ja), f'올린 뒤 홈 JA 즉시 반영 {HANGUL.findall(home_ja)[:6]}')
+        open_card(pg, 'compass')
+        check('← ホームへ' in pg.inner_text('#back-home') and pg.evaluate("document.documentElement.lang")=='ja' and pg.evaluate('XA.last.posts.length')==kept_n, '홈에서 고른 일본어가 나침반 카드에 유지')
+        pg.click('#back-home')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
+        check(pg.evaluate("document.documentElement.lang")=='ko' and pg.evaluate('XA.last.posts.length')==kept_n, '한국어로 돌아와도 같은 CSV')
+        open_card(pg, 'compass')
         n = pg.evaluate('XA.last.posts.length'); check(n == 94, f'샘플 게시물 수 {n}')
         cats = pg.evaluate('Object.entries(XA.last.posts.reduce((a,p)=>(a[p.cat]=(a[p.cat]||0)+1,a),{}))'); print('  카테고리 분포', cats)
         check(pg.evaluate("XA.last.timeSrc.id") == 94, 'ID→시각 복원 94개')
@@ -169,9 +246,12 @@ try:
         acts = pg.evaluate('XA.weeklyActions(XA.last).map(a=>a.id)')
         check(len(acts) == 3 and 'more' in acts and 'reply' in acts and 'time' in acts, f'이번 주 할 일 {acts}')
         check(pg.locator('#actions .action').count() == 3, '이번 주 할 일 카드 3장')
+        check(pg.locator('#sec-follow').is_hidden() and pg.locator('#sec-fit').is_hidden() and pg.locator('#sec-replies').is_hidden(), '나침반은 할 일 외에는 접혀 있음')
+        pg.screenshot(path=f'{SHOT}/v2_18_compass_ko.png')
         rt = pg.evaluate("""()=>{const R=XA.replyTargets(XA.last.posts.filter(p=>p.isReply));return {order:R.rows.map(r=>r.key),keep:R.keep.map(r=>r.key),drop:R.drop.map(r=>r.key),watch:R.watch.map(r=>r.key)}}""")
         check(rt['order'][0] == 'example_alpha' and rt['order'][-1] == 'example_gamma', f"답글 순위 {rt['order']}")
         check('example_alpha' in rt['keep'] and 'example_gamma' in rt['drop'] and 'example_delta' in rt['watch'] and 'example_echo' not in rt['drop'] and 'example_delta' not in rt['drop'], f'계속/없음/표본 {rt}')
+        open_sec(pg, 'replies')
         rtxt = pg.inner_text('#rtarget')
         check('상관' in rtxt and 'example_alpha' in rtxt and 'example_gamma' in rtxt and '표본 적음' in rtxt, '답글 순위 문구·핸들·표본 주의')
         links = pg.evaluate("""()=>[...document.querySelectorAll('#fit a, #rtarget a')].map(a=>({h:a.getAttribute('href'),t:a.target,r:a.rel}))""")
@@ -182,6 +262,7 @@ try:
         check(any(x['f'] == 'live' for x in qs) and any(x['f'] == 'user' for x in qs) and set(x['f'] for x in qs) <= {'live', 'user'}, f"최신/사람 탭 {[x['f'] for x in qs]}")
         share = pg.evaluate("""()=>{const p=XA.pairForContent(true);const s=XA.followShare(XA.lastContent.posts,p.ov);return {kind:p.kind,status:s.status,share:s.share,post:s.postNf,ov:s.ovNf}}""")
         check(share['kind'] == 'sample' and share['status'] == 'ok' and 0 <= share['share'] < 1 and share['ov'] > share['post'], f'예시 팔로우 비율 {share}')
+        open_sec(pg, 'follow')
         check('예시' in pg.inner_text('#follow-src') and 'EXAMPLE' in pg.inner_text('#follow-src'), '팔로우 비율에 EXAMPLE 안내')
         logic = pg.evaluate("""()=>{
           const R = XA.replyTargets([
@@ -216,19 +297,119 @@ try:
         check(logic['lang'] == ['ko', 'en', 'ja'] and logic['floor'] == [5, 40, 100], f"언어·min_faves {logic['lang']} {logic['floor']}")
         check(logic['no'] == 'noOverlap' and logic['ok'] == 'ok' and abs(logic['share'] - 0.5) < 1e-9 and logic['over'] == 'over' and logic['mismatch'] == 'mismatch', f"팔로우 비율 로직 {logic}")
         check(logic['cleaned'][0] == '' and logic['cleaned'][1] == '' and logic['cleaned'][2] == 'AI 이미지' and logic['urlsOk'], f"검색어 정리 {logic['cleaned']} nq={logic['nq']}")
-        for sel, name in [('#actions-block', 'v2_11_actions_ko'), ('#follow-block', 'v2_12_follow_ko'), ('#fit-block', 'v2_13_fit_ko'), ('#rtarget-block', 'v2_14_replies_ko')]:
+        for sel, name, sec in [('#actions-block', 'v2_11_actions_ko', None), ('#follow-block', 'v2_12_follow_ko', 'follow'), ('#fit-block', 'v2_13_fit_ko', 'fit'), ('#rtarget-block', 'v2_14_replies_ko', 'replies')]:
+            if sec: open_sec(pg, sec)
             pg.locator(sel).scroll_into_view_if_needed(); pg.wait_for_timeout(150)
             pg.locator(sel).screenshot(path=f'{SHOT}/{name}.png')
         check(pg.locator('.heat .c').count() == 168, '히트맵 168칸')
         ci = pg.inner_text('#col-info'); check('인식한 칸(17개)' in ci and '없는 칸: 없음' in ci, f'인식한 칸 표시 유지: {ci[:80]}')
         print('  제안:', pg.eval_on_selector_all('#suggest .t', 'els=>els.map(e=>e.textContent)'))
         print('  시리즈:', pg.eval_on_selector_all('#series .t', 'els=>els.map(e=>e.textContent)'))
+        open_sec(pg, 'rank')
         for m in ['likes', 'bm', 'er', 'nf', 'prof']: pg.select_option('#rank-metric', m)
+        open_sec(pg, 'heat')
         for m in ['imp', 'n']: pg.select_option('#heat-metric', m)
-        pg.select_option('#rank-metric', 'imp'); pg.select_option('#heat-metric', 'likes')
+        open_sec(pg, 'rank'); pg.select_option('#rank-metric', 'imp')
+        open_sec(pg, 'heat'); pg.select_option('#heat-metric', 'likes')
         pg.evaluate("document.querySelector('#results').scrollIntoView();window.scrollBy(0,-100)"); pg.wait_for_timeout(300)
         pg.screenshot(path=f'{SHOT}/v2_03_results_ko.png')
         pg.screenshot(path=f'{SHOT}/v2_03b_results_ko_full.png', full_page=True)
+
+        # ---------- 말투 날씨 + 엣지 ----------
+        kept = pg.evaluate('XA.last.posts.length')
+        pg.click('#back-home')
+        check(pg.evaluate('XA.last.posts.length') == kept, '홈으로 돌아가도 같은 CSV')
+        pg.click('.hub-card[data-mod="weather"]'); pg.wait_for_selector('#card-dynamic .wx-metrics')
+        wx = pg.evaluate("""() => {
+          const model = XA.toneModel(XA.last.posts);
+          const text = document.querySelector('#card-dynamic').innerText;
+          const f = model.forecast;
+          const nums = [String(f.humidity), String(f.precip), String(f.tempC), String(f.wind), String(f.vis), String(f.medLen)];
+          return { sky: f.sky, h: f.humidity, p: f.precip, t: f.tempC, w: f.wind, n: model.stats.n, basis: model.stats.basis,
+            shown: nums.every(n => text.includes(n)), honest: text.includes('심리') || text.includes('놀이'), sample: text.includes('EXAMPLE') };
+        }""")
+        check(wx['shown'] and wx['honest'] and wx['sample'] and wx['n'] >= 3 and wx['basis'] == 'original', f'날씨 숫자는 계산값과 같음 {wx}')
+        pg.screenshot(path=f'{SHOT}/v2_19_weather_ko.png')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(250)
+        enw = pg.inner_text('#card-dynamic')
+        check(not HANGUL.search(enw) and 'For fun' in enw and pg.evaluate('XA.last.posts.length') == kept, f'날씨 EN, CSV 유지 {HANGUL.findall(enw)[:4]}')
+        pg.screenshot(path=f'{SHOT}/v2_20_weather_en.png')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(250)
+        jaw = pg.inner_text('#card-dynamic')
+        check(not HANGUL.search(jaw) and '遊び' in jaw and pg.evaluate("localStorage.getItem('xa-lang')")=='ja', f'날씨 JA {HANGUL.findall(jaw)[:4]}')
+        pg.screenshot(path=f'{SHOT}/v2_21_weather_ja.png')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(200)
+        with pg.expect_download() as di:
+            pg.click('#wx-share')
+        png = open(di.value.path(), 'rb').read()
+        check(png[:8] == b'\x89PNG\r\n\x1a\n' and len(png) > 5000, f'날씨 PNG {len(png)}B')
+        open(f'{SHOT}/v2_19b_weather_png.png', 'wb').write(png)
+        edge = pg.evaluate(r"""() => {
+          const posts = (arr) => arr.map(text => ({text, isReply:false, hour:null}));
+          const sky = (arr) => { const s = XA.toneStats(posts(arr)); const f = XA.toneForecast(s); return f && f.sky; };
+          const storm = sky(['와!! 😂','대박!! 🔥','최고!! ✨','우와!! 🎉']);
+          const fog = sky(['글쎄... ㅋㅋ','몰라... ㅎㅎ','그냥... ㅋㅋㅋ','음... ㅋㅋ']);
+          const rain = sky(['이거 어때?','괜찮아?','진짜야?','해볼까?']);
+          const snow = sky(['오늘 정리했습니다.','감사합니다.','도움이 됐습니다.','정리해 두었습니다.']);
+          const long = 'This is a long neutral sentence about making videos and tools for creators every single day without any marks. ';
+          const cloudy = sky([long+long, long+long, long+long, long+long]);
+          const clear = sky(['Shipped a small update today','Drafted the next outline','Cut one repeated line','Kept the ending short']);
+          const emoji = sky(['😊😊','🌸🌸','✨✨','🎉🎉']);
+          const one = XA.toneStats([{text:'안녕!', isReply:false}]);
+          const none = XA.toneStats([{text:'   '},{text:''}]);
+          const s = XA.toneStats(posts(['와!! 😂','대박!! 🔥','최고!! ✨','우와!! 🎉']));
+          const f = XA.toneForecast(s);
+          const politePart = s.politeRate == null ? 0.35 : s.politeRate;
+          const warmth = Math.max(0, Math.min(1, 0.16 + s.em*0.30 + s.ex*0.14 + s.laugh*0.18 + s.fp*0.16 + politePart*0.12 - Math.min(0.16, Math.max(0, (s.medLen-180)/900))));
+          const timed = [];
+          for (let i=0;i<3;i++) timed.push({text:'낮에 ㅋㅋ', hour:10, isReply:false});
+          for (let i=0;i<3;i++) timed.push({text:'밤에 안녕하세요.', hour:23, isReply:false});
+          const tm = XA.toneStats(timed).time;
+          const longS = XA.toneStats([{text:'가'.repeat(8000), isReply:false}]);
+          const longF = XA.toneForecast(longS);
+          const run = (csv) => { try { const A = XA.analyze(XA.parseCSV(csv)); const st = XA.cardStatus(XA.moduleById('weather'), A); return {ok:true, state:st.state, key:st.key, mode:A.mode||'content', text:A.posts&&A.posts[0]&&A.posts[0].text, n:A.posts.length}; } catch(e) { return {ok:false, key:e.key}; } };
+          const bom = '\ufeff게시물 ID,날짜,게시물 본문,노출수\n1,2026-01-01,안녕하세요. 오늘 정리했습니다.,10\n';
+          const en = 'Post id,Date,Post text,Impressions\n1,2026-01-01,Hello there,10\n';
+          const ja = 'ポストID,日付,ポスト本文,インプレッション数\n1,2026-01-01,こんにちは。今日は晴れです。,10\n';
+          const ko = '게시물 ID,날짜,게시물 본문,노출수\n1,2026-01-01,한 줄만 있습니다!,10\n';
+          const notext = 'Post id,Date,Impressions,Likes\n1979000000000000001,2026-01-02,10,1\n';
+          const emptyText = 'Post id,Post text,Impressions\n1,,10\n';
+          const emojiCsv = 'Post id,Post text,Impressions\n1,😂🔥✨!!,10\n2,🎉✨!!,9\n3,😊!!,8\n';
+          return { storm, fog, rain, snow, cloudy, clear, emoji, oneN: one&&one.n, oneSky: one&&XA.toneForecast(one).sky, none: none===null, empty: XA.toneStats([])===null,
+            warm: Math.abs(f.warmth-warmth)<1e-9, temp: f.tempC===Math.round(5+warmth*29), hum: f.humidity===Math.round(s.express*100),
+            pre: f.precip===Math.round(s.precipShare*100), wind: f.wind===Math.max(3,Math.min(48,Math.round(1400/Math.max(s.medLen,12)))),
+            tm, longSky: longF.sky, longLen: longF.medLen,
+            bom: run(bom), en: run(en), ja: run(ja), ko: run(ko), notext: run(notext), emptyText: run(emptyText), emojiCsv: run(emojiCsv),
+            noRows: run(''), headerOnly: run('Post id,Impressions\n') };
+        }""")
+        check(edge['storm']=='storm' and edge['fog']=='fog' and edge['rain']=='rain' and edge['snow']=='snow', f"하늘 규칙 {edge['storm']} {edge['fog']} {edge['rain']} {edge['snow']}")
+        check(edge['cloudy']=='cloudy' and edge['clear']=='clear' and edge['emoji']=='clear', f"흐림/맑음/이모지 {edge['cloudy']} {edge['clear']} {edge['emoji']}")
+        check(edge['oneN']==1 and edge['oneSky']=='storm' and edge['none'] and edge['empty'], f"한 줄·빈 본문 {edge['oneN']} {edge['oneSky']}")
+        check(edge['warm'] and edge['temp'] and edge['hum'] and edge['pre'] and edge['wind'], '기온·습도·강수·바람 공식이 화면 숫자와 같음')
+        check(edge['tm']['kind']=='shift' and edge['tm']['dayN']==3 and edge['tm']['nightN']==3 and edge['tm']['dayPct']==100 and edge['tm']['nightPct']==0, f"낮/밤 {edge['tm']}")
+        check(edge['longSky']=='cloudy' and edge['longLen']==8000, f"긴 글 {edge['longSky']} {edge['longLen']}")
+        check(edge['noRows'].get('key')=='err.noRows' and edge['headerOnly'].get('key')=='err.noRows', f"빈 CSV {edge['noRows']} {edge['headerOnly']}")
+        check(edge['bom']['ok'] and edge['bom']['text'].startswith('안녕') and edge['en']['ok'] and edge['en']['text']=='Hello there' and edge['ja']['ok'] and 'こんにちは' in edge['ja']['text'] and edge['ko']['n']==1, f"헤더 BOM/ko/en/ja {edge['bom']} {edge['en']} {edge['ja']} {edge['ko']}")
+        check(edge['notext']['state']=='blocked' and edge['notext']['key']=='hub.why.noTextCol' and edge['emptyText']['key']=='hub.why.emptyText', f"본문 없음 {edge['notext']} {edge['emptyText']}")
+        check(edge['emojiCsv']['state']=='ready', f"이모지 CSV {edge['emojiCsv']}")
+        pg.evaluate("XA.handleText('Post id,Date,Impressions\\n1979000000000000001,2026-01-02,10\\n', false)")
+        pg.evaluate('XA.closeCard()')
+        why = pg.inner_text('.hub-card[data-mod="weather"]')
+        check('본문' in why and '예보를 만들지 않았' in why, f'카드에 본문 없음 이유 {why[:120]}')
+        n_blocked = pg.evaluate('XA.last.posts.length')
+        pg.click('[data-lang-toggle] button[data-lang=en]'); pg.wait_for_timeout(200)
+        why_en = pg.inner_text('.hub-card[data-mod="weather"]')
+        check(pg.evaluate('XA.last.posts.length')==n_blocked and 'no post-text column' in why_en and 'Not available yet' in pg.inner_text('#home') and not HANGUL.search(pg.inner_text('#home')), f'이유 EN, CSV 유지 {why_en[:140]}')
+        pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(200)
+        why_ja = pg.inner_text('.hub-card[data-mod="weather"]')
+        check('本文の列がありません' in why_ja and not HANGUL.search(why_ja) and pg.evaluate('XA.last.posts.length')==n_blocked, f'이유 JA {why_ja[:140]}')
+        pg.click('[data-lang-toggle] button[data-lang=ko]'); pg.wait_for_timeout(150)
+        open_card(pg, 'weather')
+        blocked = pg.inner_text('#card-dynamic')
+        check('°C' not in blocked and '예보를 만들지 않았' in blocked and pg.locator('.wx-metrics').count()==0, '본문 없는 CSV는 예보 숫자를 만들지 않음')
+        pg.click('#back-home')
+        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])', state='attached')
+        open_card(pg, 'compass')
 
         # ---------- 파서 변형 ----------
         variants = {
@@ -300,15 +481,23 @@ try:
         check(r['imp'] == 500 and r['eng'] == 10 and r['likes'] == 5 and r['rt'] == 1 and r['rep'] == 1 and r['prof'] == 1 and r['det'] == 2 and r['plink'] == 3 and r['media'] == '4' and r['cat'] == 'daily' and all('プロモ' in u or '率' in u for u in r['un']), f'일본어 구 트윗 액티비티(프로모·率 제외) {r}')
 
         # ---------- 개요 샘플 ----------
-        pg.click('#btn-sample-ov'); pg.wait_for_selector('#overview:not([hidden])'); pg.wait_for_timeout(300)
+        pg.evaluate('XA.closeCard()')
+        pg.click('#btn-sample-ov'); pg.wait_for_selector('#overview:not([hidden])', state='attached'); pg.wait_for_timeout(300)
+        open_card(pg, 'compass')
         check(pg.is_hidden('#results') and pg.locator('#overview .kpi').count() == 8, '개요 샘플: 결과 영역 전환 + KPI 8개')
         check(pg.evaluate('XA.last.pre.length') == 5, '개요 샘플: 준비 기간 5일 제외')
         check('인식한 칸' in pg.inner_text('#ov-col-info'), '개요에도 인식한 칸 표시')
         pg.evaluate("document.querySelector('#overview').scrollIntoView();window.scrollBy(0,-100)"); pg.wait_for_timeout(300)
         pg.screenshot(path=f'{SHOT}/v2_08_overview_ko.png')
-        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])'); check(pg.is_hidden('#overview'), '콘텐츠 샘플로 돌아오면 개요 숨김')
+        pg.evaluate('XA.closeCard()')
+        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])', state='attached')
+        open_card(pg, 'compass')
+        check(pg.is_hidden('#overview'), '콘텐츠 샘플로 돌아오면 개요 숨김')
+        pg.evaluate('XA.closeCard()')
         pg.set_input_files('#file', f'{ROOT}/sample.csv'); pg.wait_for_timeout(500)
+        open_card(pg, 'compass')
         check(pg.is_hidden('#sample-banner'), '파일 업로드 시 샘플 배너 숨김')
+        pg.evaluate('XA.closeCard()')
         pg.click('#btn-sample'); pg.wait_for_timeout(400)
 
         # ---------- 복붙 진단 (ko) ----------
@@ -323,6 +512,7 @@ try:
         check(int(pg.text_content('.ring text')) < 40, '인용 리액션 짧은 글 낮은 점수')
 
         # ---------- 사용법 ----------
+        pg.evaluate('XA.closeCard()')
         pg.click('.tab[data-tab=csv]')
         pg.click('.beginner-cta'); pg.wait_for_timeout(150)
         check('active' in (pg.get_attribute('#tab-help', 'class') or ''), '처음이에요 링크가 사용법을 연다')
@@ -350,6 +540,7 @@ try:
             tx = pg.evaluate(f"(()=>{{const e=document.querySelector('{sel}').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent}})()")
             # 제안 카드에는 샘플 본문의 한국어 소재가 따옴표로 들어갈 수 있음 → 카테고리 이름 외 한글 없음
             check(not HANGUL.search(tx), f'EN 모드 {sel} 한글 없음 {HANGUL.findall(tx)[:5]}')
+        open_card(pg, 'compass'); open_sec(pg, 'fit')
         fit_en = pg.evaluate("(()=>{const e=document.querySelector('#fit').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent})()")
         check(not HANGUL.search(fit_en) and 'min_faves:' in pg.inner_text('#fit') and 'People' in pg.inner_text('#fit'), f'EN 맞는 사람 찾기 크롬 {HANGUL.findall(fit_en)[:5]}')
         check(not RAWKEY.search(body), f'EN 모드 빠진 번역 키 노출 없음 {RAWKEY.findall(body)[:5]}')
@@ -363,6 +554,7 @@ try:
             check_header(pg, f'{wh[0]} en')
         pg.set_viewport_size({'width': 1280, 'height': 900}); pg.wait_for_timeout(40)
         pg.screenshot(path=f'{SHOT}/v2_04_home_en.png')
+        pg.screenshot(path=f'{SHOT}/v2_16_home_en.png')
         pg.click('.tab[data-tab=help]'); pg.wait_for_timeout(200)
         h_en = pg.inner_text('#tab-help')
         check(not HANGUL.search(h_en), f'EN 사용법 한글 없음 {HANGUL.findall(h_en)[:5]}')
@@ -373,8 +565,9 @@ try:
         pg.click('.tab[data-tab=diag]'); pg.click('#d-ex'); pg.click('#d-run'); pg.wait_for_timeout(200)
         sc = int(pg.text_content('.ring text')); dtx = pg.inner_text('#d-result')
         check(sc >= 80 and 'Takeaway' in dtx and not HANGUL.search(dtx), f'EN 진단 (예시 {sc}점, 한글 없음)')
-        pg.click('.tab[data-tab=csv]'); pg.click('#btn-sample-ov'); pg.wait_for_selector('#overview:not([hidden])'); pg.wait_for_timeout(300)
-        otx = pg.inner_text('#overview'); check(not HANGUL.search(otx) and not RAWKEY.search(otx), f'EN 개요 한글/키 노출 없음 {HANGUL.findall(otx)[:5]}')
+        pg.click('.tab[data-tab=csv]'); pg.click('#btn-sample-ov'); pg.wait_for_selector('#overview:not([hidden])', state='attached'); pg.wait_for_timeout(300)
+        open_card(pg, 'compass')
+        otx = pg.inner_text('#overview'); check(not HANGUL.search(otx) and not RAWKEY.search(otx) and 'Impressions' in otx, f'EN 개요 한글/키 노출 없음 {HANGUL.findall(otx)[:5]}')
         pg.goto(URL + 'privacy.html'); pg.wait_for_timeout(200)
         ptx = pg.inner_text('body'); check('Privacy & terms' in ptx and 'never uploaded' not in '' and not RAWKEY.search(ptx), 'EN 개인정보 페이지')
         pg.screenshot(path=f'{SHOT}/v2_10_privacy_en.png', full_page=True)
@@ -384,7 +577,7 @@ try:
         check(pg.evaluate('document.documentElement.lang') == 'ko', 'ko 선택도 저장됨')
 
         # ---------- 일본어 UI ----------
-        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])'); pg.wait_for_timeout(400)
+        pg.click('#btn-sample'); pg.wait_for_selector('#results:not([hidden])', state='attached'); pg.wait_for_timeout(400)
         pg.click('[data-lang-toggle] button[data-lang=ja]'); pg.wait_for_timeout(400)
         check(pg.evaluate('document.documentElement.lang') == 'ja' and pg.evaluate("localStorage.getItem('xa-lang')") == 'ja', 'JA 전환: <html lang=ja> + localStorage')
         check('制作者:' in re.sub(r'\s+', ' ', pg.inner_text('.topbar')) and 'X（旧Twitter）とは無関係の非公式ツールです' in pg.inner_text('body'), '일본어 비공식 안내 + 제작자 표시')
@@ -395,6 +588,11 @@ try:
         fit_ja = pg.evaluate("(()=>{const e=document.querySelector('#fit').cloneNode(true);e.querySelectorAll('.from-data').forEach(n=>n.remove());return e.textContent})()")
         check(not HANGUL.search(fit_ja) and KANA.search(fit_ja), f'JA 맞는 사람 찾기 {HANGUL.findall(fit_ja)[:5]}')
         check(not RAWKEY.search(pg.inner_text('body')), f'JA 모드 빠진 번역 키 노출 없음 {RAWKEY.findall(pg.inner_text("body"))[:5]}')
+        open_card(pg, 'weather'); pg.wait_for_timeout(200)
+        jaw = pg.inner_text('#card-dynamic')
+        check(not HANGUL.search(jaw) and '遊び' in jaw, f'JA 날씨 카드 {HANGUL.findall(jaw)[:4]}')
+        pg.screenshot(path=f'{SHOT}/v2_21_weather_ja.png')
+        pg.evaluate('XA.closeCard()')
         for wh in ((1280, 900), (1440, 900), (1024, 800)):
             pg.set_viewport_size({'width': wh[0], 'height': wh[1]}); pg.wait_for_timeout(60)
             check_header(pg, f'{wh[0]} ja')
@@ -420,10 +618,10 @@ try:
         fp = b.new_page(); ferr, freq = [], []
         fp.on('pageerror', lambda e: ferr.append(str(e))); fp.on('console', lambda m: m.type == 'error' and ferr.append(m.text))
         fp.on('request', lambda r: (not r.url.startswith('file://')) and not r.url.startswith('data:') and freq.append(r.url))
-        fp.goto(FILE_URL); fp.click('#btn-sample'); fp.wait_for_selector('#results:not([hidden])', timeout=5000); fp.wait_for_timeout(500)
+        fp.goto(FILE_URL); fp.click('#btn-sample'); fp.wait_for_selector('#results:not([hidden])', state='attached', timeout=5000); fp.wait_for_timeout(500)
         ok1 = fp.evaluate('XA.last.posts.length') == 94
-        fp.click('#btn-sample-ov'); fp.wait_for_selector('#overview:not([hidden])', timeout=5000)
-        fp.set_input_files('#file', f'{ROOT}/sample.csv'); fp.wait_for_selector('#results:not([hidden])', timeout=5000)
+        fp.click('#btn-sample-ov'); fp.wait_for_selector('#overview:not([hidden])', state='attached', timeout=5000)
+        fp.set_input_files('#file', f'{ROOT}/sample.csv'); fp.wait_for_selector('#results:not([hidden])', state='attached', timeout=5000)
         fp.click('.tab[data-tab=help]'); fp.click('[data-lang-toggle] button[data-lang=en]')
         check(ok1 and not ferr and not freq and fp.evaluate('document.documentElement.lang') == 'en', f'file:// 로 열어도 샘플·업로드·언어 전환 동작 (에러 {ferr}, 외부요청 {freq})')
         fp.close()
@@ -450,7 +648,8 @@ try:
             import csv as _csv
             pyrows = list(_csv.DictReader(open(RC, encoding='utf-8-sig')))
             pyrep = sum(1 for x in pyrows if x[list(x.keys())[2]].lstrip().startswith('@'))
-            pg.set_input_files('#file', RC); pg.wait_for_selector('#results:not([hidden])'); pg.wait_for_timeout(900)
+            pg.set_input_files('#file', RC); pg.wait_for_selector('#results:not([hidden])', state='attached'); pg.wait_for_timeout(900)
+            open_card(pg, 'compass')
             info = pg.evaluate("()=>{const A=XA.last;return {n:A.posts.length,rep:A.nReply,un:A.unmapped,keys:Object.keys(A.map).length,ids:A.timeSrc.id}}")
             check(info['n'] == len(pyrows), '실제 파일 행 수 = Python csv')
             check(info['rep'] == pyrep, '답글 수 = Python')
@@ -479,7 +678,8 @@ try:
             check(not errs, f'실제 콘텐츠 후 콘솔 에러 없음 {errs}')
             mr = b.new_page(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
             merr = []; mr.on('pageerror', lambda e: merr.append(str(e)))
-            mr.goto(URL); mr.set_input_files('#file', RC); mr.wait_for_selector('#results:not([hidden])'); mr.wait_for_timeout(700)
+            mr.goto(URL); mr.set_input_files('#file', RC); mr.wait_for_selector('#results:not([hidden])', state='attached'); mr.wait_for_timeout(700)
+            open_card(mr, 'compass')
             ow = mr.evaluate('document.documentElement.scrollWidth'); check(ow <= 392 and not merr, f'실제 콘텐츠 모바일 가로 넘침/에러 없음 ({ow})')
             mr.close()
         else:
@@ -496,10 +696,16 @@ try:
         m.goto(URL); m.wait_for_timeout(300)
         check_header(m, '390 ko', mobile=True)
         m.screenshot(path=f'{SHOT}/v2_05_mobile.png')
-        m.click('#btn-sample'); m.wait_for_selector('#results:not([hidden])'); m.wait_for_timeout(800)
-        ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 가로 넘침 없음 (scrollWidth {ow})')
+        m.click('#btn-sample'); m.wait_for_selector('#results:not([hidden])', state='attached'); m.wait_for_timeout(800)
+        ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 홈 가로 넘침 없음 (scrollWidth {ow})')
+        open_card(m, 'compass')
+        ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 나침반 가로 넘침 없음 (scrollWidth {ow})')
         m.evaluate("document.querySelector('#results').scrollIntoView();window.scrollBy(0,-130)"); m.wait_for_timeout(300)
         m.screenshot(path=f'{SHOT}/v2_05b_mobile_results.png')
+        m.click('#back-home'); open_card(m, 'weather'); m.wait_for_timeout(200)
+        ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 날씨 가로 넘침 없음 (scrollWidth {ow})')
+        m.screenshot(path=f'{SHOT}/v2_23_weather_mobile.png')
+        m.click('#back-home')
         m.click('.tab[data-tab=help]'); m.wait_for_timeout(200)
         ow = m.evaluate('document.documentElement.scrollWidth'); check(ow <= 392, f'모바일 사용법 가로 넘침 없음 ({ow})')
         m.screenshot(path=f'{SHOT}/v2_05c_mobile_howto.png', full_page=True)
@@ -513,6 +719,22 @@ try:
         check(KANA.search(m.inner_text('body')) and m.evaluate('document.documentElement.lang') == 'ja', '모바일 JA 언어')
         m.click('.tab[data-tab=diag]'); m.click('#d-ex'); m.click('#d-run'); m.wait_for_timeout(200)
         check(not merr, f'모바일 에러 없음 {merr}')
+        m.close()
+        s = b.new_page(viewport={'width': 360, 'height': 740}, device_scale_factor=2, is_mobile=True, has_touch=True)
+        serr = []; s.on('pageerror', lambda e: serr.append(str(e)))
+        s.goto(URL); s.wait_for_timeout(300)
+        s.click('[data-lang-toggle] button[data-lang=ko]'); s.wait_for_timeout(150)
+        ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360 and not serr, f'360 홈 가로 넘침 없음 ({ow}) {serr}')
+        check(s.locator('header [data-lang-toggle]').is_visible() and s.locator('.hub-card').count()==5, '360 홈에 언어 버튼과 카드 5장')
+        s.screenshot(path=f'{SHOT}/v2_22_home_360.png')
+        s.click('#btn-sample'); s.wait_for_selector('#results:not([hidden])', state='attached'); s.wait_for_timeout(400)
+        open_card(s, 'weather'); s.wait_for_timeout(200)
+        ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 날씨 가로 넘침 없음 ({ow})')
+        s.screenshot(path=f'{SHOT}/v2_23b_weather_360.png')
+        s.click('#back-home'); open_card(s, 'compass'); s.wait_for_timeout(200)
+        ow = s.evaluate('document.documentElement.scrollWidth'); check(ow <= 360, f'360 나침반 가로 넘침 없음 ({ow})')
+        s.screenshot(path=f'{SHOT}/v2_24_compass_360.png')
+        check(not serr, f'360 에러 없음 {serr}')
         b.close()
 finally:
     srv.terminate()

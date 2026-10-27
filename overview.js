@@ -118,6 +118,8 @@
       <h2>${t('ov.h.summary')}</h2>
       <div class="kpis">${kpis.map(([k, v, s]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join('')}</div>
       ${typeof XA.followShareInner === 'function' ? `<h2>${esc(t('results.h.fsrc'))}</h2>${XA.followShareInner('overview', isSample)}` : ''}
+      <button type="button" class="btn ghost" id="ov-more-btn">${esc(t('ov.moreBtn'))}</button>
+      <div id="ov-more" hidden>
       <h2>${t('ov.h.obs')}</h2>
       <div class="cards2">${obs.map((o) => `<div class="card sug"><div class="t">${o.t}</div><p>${o.p}</p></div>`).join('')}</div>
       <h2>${t('ov.h.daily')}</h2>
@@ -133,8 +135,15 @@
       <div class="card prose" style="margin-top:22px"><h3>${t('ov.toContent.h')}</h3>
         <ol><li>${t('ov.toContent.1')}</li><li>${t('ov.toContent.2')}</li><li>${t('ov.toContent.3')}</li></ol>
         <p class="small muted">${t('ov.toContent.p')}</p></div>
+      </div>
       <p class="muted small foot-note">${t('results.footnote')}</p>`;
-    if (!keepScroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const moreBtn = $('#ov-more-btn');
+    if (moreBtn) moreBtn.onclick = () => { const m = $('#ov-more'); if (m) m.hidden = !m.hidden; };
+    if (!keepScroll) {
+      const view = document.getElementById('card-view');
+      const compass = document.getElementById('card-compass');
+      if (view && !view.hidden && compass && !compass.hidden) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
   XA.renderOverview = renderOverview;
 

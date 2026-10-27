@@ -718,7 +718,10 @@
     if (fitBox) fitBox.innerHTML = fitHTML(A, hookBase, byCatO);
     const rtBox = $('#rtarget');
     if (rtBox) rtBox.innerHTML = rtargetHTML(RP);
-    if (!keepScroll) $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const view = document.getElementById('card-view');
+    const compass = document.getElementById('card-compass');
+    const compassOpen = view && !view.hidden && compass && !compass.hidden;
+    if (!keepScroll && compassOpen) $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function hourBlocks(timed) {
@@ -815,6 +818,7 @@
     if (!e) { box.textContent = ''; box.hidden = true; return; }
     box.textContent = '😢 ' + (e.key ? t(e.key, e.params) : e.message); box.hidden = false;
     $('#results').hidden = true; const o = $('#overview'); if (o) o.hidden = true;
+    if (XA.closeCard) XA.closeCard();
   }
   function handleText(text, isSample) {
     showErr(null);
@@ -827,6 +831,7 @@
         XA.lastContent = A; XA.lastContentSample = !!isSample;
         const o = $('#overview'); if (o) o.hidden = true; render(A, isSample);
       }
+      if (XA.syncHub) XA.syncHub();
     }
     catch (e) { console.warn(e); showErr(e); }
   }
