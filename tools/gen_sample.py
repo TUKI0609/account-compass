@@ -134,6 +134,18 @@ for handle, text, day, hr, minute, imp, likes, bm, shares, nf, rep, rt, prof, de
     rows.append((when, [pid, when.strftime('%a, %b %d, %Y'), text,
                         f"https://x.com/example_creator/status/{pid}", imp, likes, eng, bm, shares, nf,
                         rep, rt, prof, det, url, 0, 0]))
+# 예시가 공유하기 좋은 결과가 되게, 이야기 글 하나의 노출만 키운다.
+# 한 방 지수 = 그 글의 노출 / 원글 노출 중앙값. 좋아요·북마크·새 팔로우는 그대로 둔다.
+STORY_MARK = "돈 쓰기 전에 이거부터 해보세요."
+story = next((rec for rec in rows if str(rec[1][2]).startswith(STORY_MARK)), None)
+if story is None:
+    raise SystemExit('story row missing')
+
+originals = [rec for rec in rows if not str(rec[1][2]).lstrip().startswith('@')]
+base_vals = sorted(int(rec[1][4]) for rec in originals if rec is not story)
+# 원글 80개(이 글 포함)의 중앙값은, 이 글이 최대일 때 나머지 79개의 40·41번째 값의 평균이다.
+med = (base_vals[39] + base_vals[40]) / 2
+story[1][4] = int(round(med * 52))
 rows.sort(key=lambda r: r[0], reverse=True)
 H = ["Post id","Date","Post text","Post Link","Impressions","Likes","Engagements","Bookmarks","Shares",
      "New follows","Replies","Reposts","Profile visits","Detail Expands","URL Clicks","Hashtag Clicks","Permalink Clicks"]
@@ -141,4 +153,9 @@ import os
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sample.csv'), 'w', newline='', encoding='utf-8') as f:
     w = csv.writer(f); w.writerow(H)
     for _, r in rows: w.writerow(r)
-print(len(rows), 'rows', sum(1 for _, r in rows if str(r[2]).lstrip().startswith('@')), 'replies')
+orig_imp = sorted(int(r[4]) for _, r in rows if not str(r[2]).lstrip().startswith('@'))
+med_imp = (orig_imp[len(orig_imp)//2 - 1] + orig_imp[len(orig_imp)//2]) / 2
+all_imp = sum(int(r[4]) for _, r in rows)
+all_nf = sum(int(r[9]) for _, r in rows)
+print(len(rows), 'rows', sum(1 for _, r in rows if str(r[2]).lstrip().startswith('@')), 'replies',
+      'hit', round(max(orig_imp) / med_imp, 2), 'price', round(all_imp / all_nf, 2), 'nf', all_nf, 'imp', all_imp)
